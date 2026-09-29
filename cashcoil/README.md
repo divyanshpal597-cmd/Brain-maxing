@@ -58,3 +58,13 @@ npm run android            # syncs www/ and opens Android Studio
 - Coins are a closed pot: they enter only as stakes and leave only through cash-out. That maps 1:1 onto a real wallet, but the arena then **must run server-side** (an authoritative simulation), because a client-side sim can be edited.
 - Daily and mission and level-up coins are *minted*. With real money they should become a separate non-withdrawable bonus balance.
 - Real-money skill and stake games are regulated: check licensing, age and KYC, and responsible-play limits for each target market before launch.
+
+## Building the APK
+
+```bash
+cd cashcoil && npm install && npx cap sync android
+cd android && ./gradlew assembleDebug     # needs JDK 21 + Android SDK 35 (set ANDROID_HOME)
+# → android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+The Android project is committed with the app icon, splash, immersive fullscreen and keep-screen-on already set up in `MainActivity.java`.
