@@ -1,0 +1,8 @@
+{
+  "appId": "app.cashcoil.game",
+  "appName": "Cashcoil",
+  "webDir": "www",
+  "backgroundColor": "#05070d",
+  "android": { "backgroundColor": "#05070d" },
+  "ios": { "backgroundColor": "#05070d", "contentInset": "never" }
+}

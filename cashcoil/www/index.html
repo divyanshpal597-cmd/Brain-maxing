@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#05070d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cashcoil">
+<meta name="description" content="Eat. Cut. Cash out. A stake arena snake game.">
+<title>Cashcoil</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- ================= HOME ================= -->
+<section id="home" class="screen">
+  <header class="top">
+    <button class="lvl" id="hLevel" aria-label="Profile">
+      <svg viewBox="0 0 44 44"><circle class="trk" cx="22" cy="22" r="19"/><circle class="bar" id="hLvlRing" cx="22" cy="22" r="19"/></svg>
+      <b id="hLvl">1</b>
+    </button>
+    <div class="streak" id="hStreak"></div>
+    <div class="bal" id="hBal"><i class="coin"></i><b id="hCoins">0</b></div>
+  </header>
+
+  <div class="hero">
+    <h1 class="logo"><span>cash</span><span>coil</span></h1>
+    <p class="tag">eat · cut · cash out</p>
+  </div>
+
+  <div class="dock-wrap">
+    <button class="daily" id="hDaily"></button>
+
+    <div class="stake" id="hStake">
+      <button class="arr" id="stDown" aria-label="Lower stake">
+        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <div class="st">
+        <small>STAKE</small>
+        <div class="stv"><i class="coin"></i><b id="stVal">50</b></div>
+        <small class="st-hint" id="stHint">win up to ?</small>
+      </div>
+      <button class="arr" id="stUp" aria-label="Raise stake">
+        <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+
+    <button class="play" id="play"><span>PLAY</span></button>
+
+    <nav class="dock">
+      <button data-sheet="skins" aria-label="Skins">
+        <svg viewBox="0 0 24 24"><path d="M4 16c3 0 3-4 6-4s3 4 6 4 3-3 4-5"/><circle cx="19.5" cy="9" r="1.5"/></svg>
+        <span>Skins</span>
+      </button>
+      <button data-sheet="missions" aria-label="Missions">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r=".6"/></svg>
+        <span>Missions</span><em class="dot" id="mDot"></em>
+      </button>
+      <button data-sheet="profile" aria-label="Profile">
+        <svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>
+        <span>Stats</span>
+      </button>
+    </nav>
+  </div>
+</section>
+
+<!-- ================= HUD ================= -->
+<section id="hud" class="hidden">
+  <div class="wallet">
+    <div class="w-amt"><i class="coin"></i><b id="wCash">0</b></div>
+    <div class="w-sub"><span class="mult" id="wMult">1.00×</span><span>out <b id="wNet">0</b></span></div>
+  </div>
+  <div class="board" id="board"></div>
+  <div class="banner" id="banner"><b></b><small></small></div>
+  <div class="killpop" id="killpop"></div>
+  <div class="feed" id="feed"></div>
+  <div class="shieldtag" id="shieldTag">protected <b id="shieldT">4.0</b>s</div>
+  <div class="joy" id="joy"><div class="knob" id="knob"></div></div>
+
+  <button class="btn-cash" id="bCash">
+    <svg viewBox="0 0 80 80"><circle class="trk" cx="40" cy="40" r="36"/><circle class="bar" id="cashRing" cx="40" cy="40" r="36"/></svg>
+    <span>HOLD<br><b>CASH OUT</b></span>
+  </button>
+  <button class="btn-boost" id="bBoost">
+    <svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>
+  </button>
+  <div class="keys">mouse steer · click / shift sprint · hold <b>space</b> cash out</div>
+</section>
+
+<!-- ================= RESULT ================= -->
+<section id="result" class="screen hidden"><div class="res" id="res"></div></section>
+
+<!-- ================= SHEETS / MODALS ================= -->
+<section id="sheet" class="hidden">
+  <div class="scrim" id="scrim"></div>
+  <div class="card" id="sheetCard"></div>
+</section>
+<div id="modal" class="hidden"></div>
+<div id="toasts"></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
