@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Hunter System",
+    "slug": "hunter-system",
+    "scheme": "hunter",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#050813",
+    "ios": { "supportsTablet": false, "bundleIdentifier": "com.hunter.system" },
+    "android": { "package": "com.hunter.system", "edgeToEdgeEnabled": true },
+    "web": { "bundler": "metro", "output": "single" },
+    "plugins": ["expo-router", "expo-status-bar", "expo-font", "expo-audio"],
+    "experiments": { "typedRoutes": true }
+  }
+}
