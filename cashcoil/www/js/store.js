@@ -14,9 +14,10 @@ function defaults(){
     stakeIdx: 2,
     daily: { last: null, streak: 0 },
     missions: { day: null, list: [] },
-    stats: { games: 0, kills: 0, cashouts: 0, earned: 0, bestCash: 0, bestMult: 0, bestKills: 0, bestTime: 0 },
+    stats: { games: 0, kills: 0, cashouts: 0, earned: 0, bestCash: 0, bestMult: 0, bestKills: 0, bestTime: 0, chests: 0 },
     settings: { sound: true, haptics: true },
     seenTutorial: false,
+    discovered: [],
   };
 }
 

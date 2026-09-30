@@ -20,24 +20,42 @@ npm run cap:add:android    # once (or cap:add:ios on a Mac)
 npm run android            # syncs www/ and opens Android Studio
 ```
 
+## The island (open world)
+
+The whole game is one seeded 12,000-unit island with nine regions. It is identical on every device, so players can learn it.
+
+| Region | Identity | Mechanic |
+| --- | --- | --- |
+| **The Nest** (centre) | Spawn meadow | Dense cheap food; every road starts here |
+| **Frostbite Tundra** (N) | Ice sheets, snow pines | Ice: turns drift wide, slightly faster; fat frost orbs |
+| **Crystal Caves** (NE) | Glowing crystals | Pitch dark: small light radius, distant snakes show only their eyes |
+| **Neon Strip** (E) | City grid, neon | 4 **jackpot machines**: drive in to spin for gems/mass (7-7-7 = jackpot) |
+| **Magma Wastes** (SE) | Lava pools, obsidian | **Lava kills**; **geysers** telegraph, then spray ember orbs |
+| **Sunken Ruins** (S) | Pillared ruins | **The Vault** opens every 2.5 min for 25 s and pours out gems and mass |
+| **Wildwood** (SW) | Forest canopy | Snakes under trees are hidden (no name tag, hunters can't target you) |
+| **Mirewater Marsh** (W) | Swamp pools, rain | Shallow water slows you by 34%; fish orbs swim away |
+| **Bone Desert** (NW) | Dunes, bones | The invincible **Dune Leviathan** roams, burrows, and bursts up under you |
+
+**Everywhere:** the ocean coast (deep water drowns you) and solid rocks you slide along. Roads give +15% speed and blue **speed pads** on them give a free sprint. Three **portal pairs** link opposite ends of the map. **Coil chests** (wood/iron/gold) crack when you circle your body all the way around them. **Frenzy** surges pop up in random regions. A 4-minute **day/night cycle** darkens the map at night.
+
 ## How it plays
 
-- **Drag anywhere** to steer (a floating joystick). **⚡** sprints and burns length. **Hold CASH OUT** for 3s to bank your wallet.
-- Every snake at a table buys in at the **same stake**. Cut a snake off and its wallet spills as gold coins for anyone to grab.
-- The richest snake wears the **crown**. Hunter bots go after smaller snakes, and they like crowned players.
-- **Frenzy** surges drop a cluster of mass somewhere on the map, and an edge arrow points to them.
-- Cash-out pays 95%. The 5% house fee is already modelled.
+- **Drag anywhere** to steer. **⚡** sprints and burns length.
+- You can only cash out at one of the **5 banks**. A gold arrow always points to the nearest one. Hold CASH OUT inside the ring for 2.5 s and your snake coils around the vault door on its own. Bots bank too, so camping a bank is a strategy.
+- Every snake at a table buys in at the **same stake**. Cut a snake off and its wallet spills for anyone to grab. Money is never lost to lava or water; it washes ashore.
+- The richest snake wears the **crown** and is shown on the minimap. Hunter bots prefer crowned and player targets.
+- Tap the minimap (or press **M**) for the full live map.
 
 ## What keeps players coming back
 
 | Loop | Where |
 | --- | --- |
-| Daily reward ladder (7 days, streak flame on home) | `store.js` → `claimDaily` |
-| 3 daily missions with coin and XP rewards | `config.js` → `MISSION_POOL` |
-| XP → levels → coin bonus and skin unlocks (10 skins) | `config.js` → `SKINS`, `xpForLevel` |
-| Live multiplier (1.00× → 2.4×), cut combos (DOUBLE CUT, RAMPAGE…), crown | `game.js`, `main.js` HUD |
-| Near-miss feedback ("0.4s from cashing out") and one-tap buy-back | `main.js` → `showResult` |
-| Pitch-ladder pickup sounds, coin chimes, haptics, slow-mo death, screen shake | `fx.js`, `game.js` |
+| **Exploration:** 9 regions to discover (+150 XP each), a fogged world map on the home screen | `world.js`, `main.js` → `mapSheet` |
+| Extraction tension: carry a fat wallet across the map to a bank | `game.js` → `stepPlaying` |
+| Scheduled world events (Vault timer, frenzy, geysers, night) that pull everyone together | `game.js` → `stepFeatures` |
+| XP gems from vault, chests and jackpots (the world pays in XP and mass, never cash) | `game.js` |
+| Daily reward ladder, 3 daily missions from a pool of 13, levels, 10 skins | `store.js`, `config.js` |
+| Live multiplier, cut combos, crown, near-miss feedback, one-tap buy-back | `main.js` |
 
 ## Layout
 
@@ -46,7 +64,8 @@ npm run android            # syncs www/ and opens Android Studio
 | `www/index.html` | Screens: home, HUD, result, sheets, modals |
 | `www/css/app.css` | All styling (safe-area aware, portrait and landscape) |
 | `www/js/config.js` | Tuning, skins, missions, bot names |
-| `www/js/game.js` | Arena engine: snakes, bots, collisions, economy, canvas renderer |
+| `www/js/world.js` | The island: seeded terrain bake, regions, landmarks, rocks, decor, weather, map rendering |
+| `www/js/game.js` | Engine: snakes, bots, boss, orb spatial grid, collisions, economy, world events, renderer |
 | `www/js/main.js` | UI, input (joystick, buttons, keyboard), progression hooks |
 | `www/js/store.js` | Persistent profile (localStorage), daily reward, missions, XP |
 | `www/js/fx.js` | Synthesised WebAudio sfx and vibration |

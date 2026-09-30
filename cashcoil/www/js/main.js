@@ -1,11 +1,12 @@
 /* ============================================================
    Cashcoil — screens, HUD, input, meta-progression
    ============================================================ */
-import { STAKES, SKINS, RAKE, CASHOUT_TIME, REFILL, DAILY_LADDER, xpForLevel } from './config.js';
+import { STAKES, SKINS, RAKE, CASHOUT_TIME, REFILL, DAILY_LADDER, xpForLevel, GEM_XP, DISCOVER_XP, CHEST_XP } from './config.js';
 import { P, save, stake, shiftStake, addXP, levelProgress, skinUnlocked, dailyReady, dailyPreview,
          claimDaily, streak, missions, missionDef, missionReward, missionsClaimable, trackMissions,
          claimMission, msToMidnight } from './store.js';
-import { G, initGame, startRun, toMenu, segColor, fmt, clamp } from './game.js';
+import { G, initGame, startRun, toMenu, segColor, fmt, meters, minimapRect } from './game.js';
+import { world, REGIONS, drawMap, HALF } from './world.js';
 import { sfx, buzz, unlockAudio } from './fx.js';
 
 const $ = id => document.getElementById(id);
@@ -18,6 +19,7 @@ const els = {
   wCash: $('wCash'), wMult: $('wMult'), wNet: $('wNet'), board: $('board'), banner: $('banner'),
   killpop: $('killpop'), feed: $('feed'), shieldTag: $('shieldTag'), shieldT: $('shieldT'),
   joy: $('joy'), knob: $('knob'), bCash: $('bCash'), bBoost: $('bBoost'), cashRing: $('cashRing'),
+  region: $('regionTag'), ticker: $('ticker'), cashLbl: $('cashLbl'), mapov: $('mapov'), mapCv: $('mapCv'), mapInfo: $('mapInfo'),
   sheet: $('sheet'), sheetCard: $('sheetCard'), scrim: $('scrim'), modal: $('modal'), toasts: $('toasts'),
 };
 
@@ -104,6 +106,7 @@ function renderHome(animateCoins = false){
   els.play.classList.toggle('refill', broke);
   els.play.firstElementChild.textContent = broke ? `FREE REFILL +${REFILL}` : P.coins < s ? 'LOWER STAKE' : 'PLAY';
 
+  $('mDotMap').textContent = `${P.discovered.length}/${REGIONS.length}`;
   const n = missionsClaimable();
   els.mDot.textContent = n;
   els.mDot.classList.toggle('on', n > 0);
@@ -191,13 +194,17 @@ function beginRun(){
   els.wCash.textContent = fmt(runStake);
   startRun(runStake, SKINS.find(s => s.id === P.skin) || SKINS[0]);
   sfx.tap(); buzz(15);
-  if (P.stats.games <= 3)
+  runNew = [];
+  G.showChestTip = (P.stats.chests || 0) < 2;
+  if (P.stats.games <= 3){
     setTimeout(() => banner(TOUCH ? 'DRAG TO STEER' : 'MOUSE TO STEER',
-      TOUCH ? 'Tap ⚡ to sprint · hold CASH OUT to bank your wallet' : 'Click to sprint · hold SPACE to bank your wallet', 'gold'), 400);
+      TOUCH ? 'Tap ⚡ to sprint · steal wallets · bank them at a BANK' : 'Click to sprint · steal wallets · bank them at a BANK', 'gold'), 400);
+    setTimeout(() => banner('CASH OUT AT A BANK', 'Follow the gold arrow — hold CASH OUT inside the ring', 'gold'), 4200);
+  }
 }
 
 /* ---------- HUD ---------- */
-let lastCash = 0, boardT = 0, bannerTO = null;
+let lastCash = 0, boardT = 0, bannerTO = null, lastLbl = '', tickT = 0, runNew = [], regionTO = null;
 function hudFrame(dt){
   if (G.state !== 'playing' && G.state !== 'ending') return;
   const p = G.player;
@@ -219,15 +226,29 @@ function hudFrame(dt){
 
   const k = Math.min(1, G.cashT / CASHOUT_TIME);
   els.cashRing.style.strokeDashoffset = 226.2 * (1 - k);
-  els.bCash.classList.toggle('locked', p.shield > 0);
+  const inBank = !!G.bankIn;
+  els.bCash.classList.toggle('locked', p.shield > 0 || !inBank);
+  els.bCash.classList.toggle('ready', inBank && p.shield <= 0);
+  const lbl = inBank ? 'HOLD<br><b>CASH OUT</b>' : `BANK<br><b>${G.bankNear ? meters(G.bankDist) : '—'}</b>`;
+  if (lbl !== lastLbl){ els.cashLbl.innerHTML = lbl; lastLbl = lbl; }
+
+  tickT -= dt;
+  if (tickT <= 0){
+    tickT = .25;
+    const v = world.vault;
+    const vt = v.state === 'open' ? `<b class="open">VAULT OPEN · ${Math.ceil(v.t)}s</b>`
+             : `Vault opens in <b>${Math.floor(v.t / 60)}:${String(Math.ceil(v.t) % 60).padStart(2, '0')}</b>`;
+    const night = G.night > .5 ? ' · <span class="nt">night</span>' : '';
+    els.ticker.innerHTML = vt + night;
+  }
 
   boardT -= dt;
   if (boardT <= 0){
     boardT = .3;
-    const alive = G.snakes.filter(s => s.alive).sort((a, b) => b.cash - a.cash);
+    const alive = G.snakes.filter(s => s.alive && !s.isBoss).sort((a, b) => b.cash - a.cash);
     const top = alive.slice(0, 5), rank = alive.indexOf(p) + 1;
     const dot = s => s.skin.kind === 'rainbow' ? 'conic-gradient(red,yellow,lime,cyan,blue,magenta,red)' : s.skin.a;
-    els.board.innerHTML = top.map((s, i) => `<div class="row ${s.isPlayer ? 'me' : ''}"><i style="background:${dot(s)}"></i><span>${i === 0 ? '👑 ' : ''}${s.isPlayer ? 'You' : s.name}</span><b>${fmt(s.cash)}</b></div>`).join('')
+    els.board.innerHTML = top.map((s, i) => `<div class="row ${s.isPlayer ? 'me' : ''}"><i style="background:${dot(s)}"></i><span>${s === G.king ? '👑 ' : ''}${s.isPlayer ? 'You' : s.name}</span><b>${fmt(s.cash)}</b></div>`).join('')
       + (rank > 5 ? `<div class="rank">you're #${rank} · <b style="color:#fff">${fmt(p.cash)}</b></div>` : '');
   }
 }
@@ -247,20 +268,35 @@ G.hooks.frame = hudFrame;
 G.hooks.kill = k => {
   els.killpop.innerHTML = `<div><b>${k.word}</b><small>${k.king ? '👑 Dethroned ' : ''}${k.name} spilled ${fmt(k.cash)}</small></div>`;
 };
-G.hooks.feed = (text, cash) => {
+G.hooks.feed = (text, cash, news) => {
   const d = document.createElement('div');
+  if (news) d.className = 'news';
   d.innerHTML = `${text}${cash > 1 ? ` · <b>${fmt(cash)}</b>` : ''}`;
   els.feed.prepend(d);
   while (els.feed.children.length > 3) els.feed.lastChild.remove();
   setTimeout(() => { d.style.opacity = 0; setTimeout(() => d.remove(), 500); }, 4000);
 };
 G.hooks.end = r => showResult(r);
+G.hooks.region = R => {
+  const first = !P.discovered.includes(R.key);
+  els.region.innerHTML = `<i>${R.icon}</i>${R.name}`;
+  els.region.classList.remove('on'); void els.region.offsetWidth; els.region.classList.add('on');
+  clearTimeout(regionTO);
+  regionTO = setTimeout(() => els.region.classList.remove('on'), 3500);
+  if (first){
+    P.discovered.push(R.key); save();
+    runNew.push(R.key);
+    sfx.discover(); buzz([20, 40, 20]);
+    banner('NEW REGION DISCOVERED', `${R.name} · +${DISCOVER_XP} XP · ${P.discovered.length}/${REGIONS.length} explored`, 'mint');
+  }
+};
 
 /* ============================================================
    RESULT
    ============================================================ */
 function showResult(r){
   els.hud.classList.add('hidden');
+  els.mapov.classList.add('hidden');
   els.joy.classList.remove('on');
   G.input.boost = G.input.cash = false;
   els.bBoost.classList.remove('on'); els.bCash.classList.remove('on');
@@ -275,13 +311,17 @@ function showResult(r){
   st.bestTime = Math.max(st.bestTime, r.time);
   save();
 
+  st.chests = (st.chests || 0) + r.chests;
   const xp = Math.round(r.eaten * .4 + r.frenzy + r.kills * 35 + (r.bestCombo > 1 ? r.bestCombo * 15 : 0)
-    + r.time * .6 + r.king * 40 + (r.win ? 50 + Math.max(0, net / r.stake - 1) * 60 : 0));
+    + r.time * .6 + r.king * 40 + (r.win ? 50 + Math.max(0, net / r.stake - 1) * 60 : 0)
+    + r.gems * GEM_XP + r.chests * CHEST_XP + runNew.length * DISCOVER_XP);
+  save();
   const lvlBefore = P.level, progBefore = levelProgress();
 
   const completed = trackMissions({
     eat: r.eaten, kills: r.kills, cashouts: r.win ? 1 : 0, mult: r.win ? net / r.stake : 0,
     survive: r.time, king: r.king, boost: r.boostT, frenzy: r.frenzy,
+    regions: r.regions, chests: r.chests, vault: r.vault, portals: r.portals, jackpots: r.jackpots, gems: r.gems,
   });
   const ups = addXP(xp);
 
@@ -290,11 +330,14 @@ function showResult(r){
   let line, near = '';
   if (win){
     const d = net - r.stake;
-    line = d >= 0 ? `You walked out <b>${fmt(d)}</b> up on a ${fmt(r.stake)} stake.`
+    line = d >= 0 ? `Banked at <b>${r.bank}</b> — <b>${fmt(d)}</b> up on a ${fmt(r.stake)} stake.`
                   : `Banked ${fmt(net)} of your ${fmt(r.stake)} stake — live to fight again.`;
   } else {
-    line = r.killer ? `<b>${r.killer}</b> cut you off. Your wallet is on the floor — someone's already eating it.`
-                    : `You hit the edge of the arena. Your wallet is on the floor.`;
+    line = r.cause === 'the Dune Leviathan' ? `The <b>Dune Leviathan</b> swallowed you whole. Your wallet is in the sand.`
+         : r.killer ? `<b>${r.killer}</b> cut you off. Your wallet is on the floor — someone's already eating it.`
+         : r.cause === 'the lava' ? `You slid into <b>lava</b>. Your wallet spilled on the rocks.`
+         : r.cause === 'the deep water' ? `You swam into the <b>deep water</b> and sank. Your wallet washed ashore.`
+         : `You died. Your wallet is on the floor.`;
     if (r.nearMiss > .3) near = `So close — you were ${(CASHOUT_TIME - r.nearMiss).toFixed(1)}s from cashing out.`;
     else if (r.peak > r.stake * 1.25) near = `You were holding ${fmt(r.peak)} (${(r.peak / r.stake).toFixed(1)}×). Bank it next time.`;
   }
@@ -302,7 +345,7 @@ function showResult(r){
   const again = P.coins >= r.stake ? r.stake : STAKES.slice().reverse().find(s => s <= P.coins);
   els.res.className = 'res ' + (win ? 'win' : 'lose');
   els.res.innerHTML = `
-    <div class="kicker">${win ? 'CASHED OUT' : r.killer ? 'CUT OFF' : 'WIPED OUT'}</div>
+    <div class="kicker">${win ? 'BANKED' : r.cause === 'the Dune Leviathan' ? 'DEVOURED' : r.killer ? 'CUT OFF' : r.cause === 'the lava' ? 'MELTED' : r.cause === 'the deep water' ? 'DROWNED' : 'WIPED OUT'}</div>
     <div class="big"><i class="coin"></i><span id="rAmt">0</span></div>
     <span class="delta ${win && net >= r.stake ? 'pos' : 'neg'}">${win
       ? `${net >= r.stake ? '+' : '−'}${fmt(Math.abs(net - r.stake))} · ${mult.toFixed(2)}×`
@@ -313,6 +356,12 @@ function showResult(r){
       <div><b>${r.kills}</b><small>cuts</small></div>
       <div><b>${mmss(r.time)}</b><small>alive</small></div>
       <div><b>${fmt(r.peak)}</b><small>peak</small></div>
+    </div>
+    <div class="loot">
+      ${r.gems ? `<span><i class="gem"></i>${r.gems} gems</span>` : ''}
+      ${r.chests ? `<span>▣ ${r.chests} chest${r.chests > 1 ? 's' : ''}</span>` : ''}
+      <span>◎ ${r.regions} region${r.regions > 1 ? 's' : ''}</span>
+      ${runNew.length ? `<span class="new">★ ${runNew.length} discovered</span>` : ''}
     </div>
     <div class="xp">
       <div class="xl"><span>Level <span id="rLvl">${lvlBefore}</span></span><b>+${xp} XP</b></div>
@@ -411,12 +460,14 @@ function openSheet(kind){
   const c = els.sheetCard;
   if (kind === 'skins') c.innerHTML = skinsSheet();
   else if (kind === 'missions') c.innerHTML = missionsSheet();
+  else if (kind === 'map') c.innerHTML = mapSheet();
   else c.innerHTML = profileSheet();
   els.sheet.classList.remove('hidden');
   c.scrollTop = 0;
   if (kind === 'skins') wireSkins();
   if (kind === 'missions') wireMissions();
   if (kind === 'profile') wireProfile();
+  if (kind === 'map') wireMap();
 }
 function closeSheet(){ els.sheet.classList.add('hidden'); renderHome(); }
 els.scrim.onclick = closeSheet;
@@ -521,6 +572,46 @@ function wireProfile(){
   });
 }
 
+/* ---------- world map ---------- */
+function paintMap(canvas, live){
+  const r = canvas.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1), size = Math.max(1, Math.min(r.width, r.height));
+  canvas.width = canvas.height = size * dpr;
+  const g = canvas.getContext('2d');
+  g.scale(dpr, dpr);
+  drawMap(g, size, { discovered: P.discovered, labels: true, extra: (tx, s) => {
+    const dot = (x, y, rr, col) => { g.fillStyle = col; g.beginPath(); g.arc(tx(x), tx(y), rr, 0, 7); g.fill(); };
+    if (!live) return;
+    if (G.event) dot(G.event.x, G.event.y, 5 * s, 'rgba(56,225,255,.8)');
+    if (G.king && G.king !== G.player){ const h = G.king.head(); dot(h.x, h.y, 4 * s, '#ffdf8a'); }
+    if (G.boss && G.boss.phase === 'surface'){ const h = G.boss.head(); dot(h.x, h.y, 5 * s, '#ff5a4d'); }
+    if (G.player && G.player.alive){
+      const h = G.player.head();
+      g.save(); g.translate(tx(h.x), tx(h.y)); g.rotate(G.player.angle);
+      g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(10 * s, 0); g.lineTo(-7 * s, -7 * s); g.lineTo(-7 * s, 7 * s); g.closePath(); g.stroke(); g.fill();
+      g.restore();
+    }
+  }});
+}
+function openMapOverlay(){
+  els.mapov.classList.remove('hidden');
+  sfx.tap();
+  const v = world.vault;
+  els.mapInfo.innerHTML = `<span><i class="sq"></i>Bank</span><span><i class="dt" style="background:#5df2c0"></i>Vault ${v.state === 'open' ? 'OPEN' : Math.ceil(v.t) + 's'}</span><span><i class="dt" style="background:#38e1ff"></i>Frenzy</span><span><i class="dt" style="background:#ff5a4d"></i>Leviathan</span><span>${P.discovered.length}/${REGIONS.length} explored · tap to close</span>`;
+  requestAnimationFrame(() => paintMap(els.mapCv, true));
+}
+els.mapov.addEventListener('pointerdown', e => { e.stopPropagation(); els.mapov.classList.add('hidden'); });
+
+function mapSheet(){
+  return `<div class="grab"></div><h2>The Island</h2><p class="sub">${P.discovered.length} of ${REGIONS.length} regions discovered · +${DISCOVER_XP} XP each</p>
+    <canvas id="homeMap" class="homemap"></canvas>
+    <div class="regions">${REGIONS.map(R => {
+      const k = P.discovered.includes(R.key);
+      return `<div class="rg ${k ? '' : 'lock'}"><i>${k ? R.icon : '?'}</i><div><b>${k ? R.name : 'Undiscovered'}</b><small>${k ? R.desc : 'Go find it.'}</small></div></div>`;
+    }).join('')}</div>`;
+}
+function wireMap(){ requestAnimationFrame(() => paintMap($('homeMap'), false)); }
+
 /* ============================================================
    INPUT
    ============================================================ */
@@ -530,6 +621,8 @@ const JOY_R = 44;
 cv.addEventListener('pointerdown', e => {
   if (G.state !== 'playing') return;
   unlockAudio();
+  const mm = minimapRect();
+  if (Math.hypot(e.clientX - (mm.x + mm.size / 2), e.clientY - (mm.y + mm.size / 2)) < mm.size / 2 + 6){ openMapOverlay(); return; }
   if (e.pointerType === 'mouse'){ if (e.button === 0) G.input.boost = true; return; }
   if (joyId !== null) return;
   joyId = e.pointerId; joyX = e.clientX; joyY = e.clientY;
@@ -586,6 +679,7 @@ holdButton(els.bCash, 'cash');
 addEventListener('keydown', e => {
   if (e.code === 'Space' || e.code === 'KeyE'){ e.preventDefault(); G.input.cash = true; }
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') G.input.boost = true;
+  if (e.code === 'KeyM' && G.state === 'playing'){ if (els.mapov.classList.contains('hidden')) openMapOverlay(); else els.mapov.classList.add('hidden'); }
   if (e.code === 'Enter' && G.state === 'menu' && els.sheet.classList.contains('hidden') && els.modal.classList.contains('hidden')) els.play.click();
   if (G.state === 'menu' && e.code === 'ArrowLeft') changeStake(-1);
   if (G.state === 'menu' && e.code === 'ArrowRight') changeStake(1);

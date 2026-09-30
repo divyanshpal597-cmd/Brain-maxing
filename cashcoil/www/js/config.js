@@ -2,12 +2,16 @@
    Cashcoil — tuning + content tables
    ============================================================ */
 
-export const WORLD_R       = 2600;
-export const TARGET_FOOD   = 800;
-export const FIELD_SIZE    = 16;     // snakes alive during a run (incl. player)
-export const AMBIENT_COUNT = 10;     // snakes drifting behind the home screen
+export const TARGET_FOOD   = 2800;   // loose food across the whole island
+export const BOT_COUNT     = 30;     // bots roaming the island
 export const RAKE          = 0.05;   // house fee on cash-out
-export const CASHOUT_TIME  = 3;      // seconds to hold cash-out
+export const CASHOUT_TIME  = 2.5;    // seconds to hold cash-out inside a bank
+export const VAULT_CLOSED  = 150;    // seconds between vault openings
+export const VAULT_OPEN    = 25;
+export const DAY_LENGTH    = 240;    // full day/night cycle, seconds
+export const GEM_XP        = 5;      // XP per gem
+export const DISCOVER_XP   = 150;
+export const CHEST_XP      = 40;
 
 /* Soft currency for now. The arena is still a closed pot: coins only
    enter as stakes and only leave through a cash-out, so the economy
@@ -54,14 +58,19 @@ export const SKINS = [
 
 /* daily missions — three are drawn each day */
 export const MISSION_POOL = [
-  { id:'eat',     metric:'eat',      mode:'total', ns:[150, 300, 600],  text:n => `Eat ${n} orbs` },
-  { id:'kill',    metric:'kills',    mode:'total', ns:[1, 3, 6],        text:n => `Cut off ${n} snake${n>1?'s':''}` },
-  { id:'cash',    metric:'cashouts', mode:'total', ns:[1, 2, 4],        text:n => `Cash out ${n} time${n>1?'s':''}` },
-  { id:'mult',    metric:'mult',     mode:'best',  ns:[1.5, 2, 3],      text:n => `Cash out at ${n}× your stake` },
-  { id:'survive', metric:'survive',  mode:'best',  ns:[60, 150, 300],   text:n => `Survive ${n}s in one run` },
-  { id:'king',    metric:'king',     mode:'total', ns:[1, 2, 3],        text:n => `Take the crown ${n>1?n+' times':''}`.trim() },
-  { id:'boost',   metric:'boost',    mode:'total', ns:[20, 45, 90],     text:n => `Sprint for ${n}s` },
-  { id:'frenzy',  metric:'frenzy',   mode:'total', ns:[20, 50, 100],    text:n => `Eat ${n} frenzy orbs` },
+  { id:'eat',      metric:'eat',      mode:'total', ns:[150, 300, 600],  text:n => `Eat ${n} orbs` },
+  { id:'kill',     metric:'kills',    mode:'total', ns:[1, 3, 6],        text:n => `Cut off ${n} snake${n>1?'s':''}` },
+  { id:'cash',     metric:'cashouts', mode:'total', ns:[1, 2, 4],        text:n => `Bank your wallet ${n} time${n>1?'s':''}` },
+  { id:'mult',     metric:'mult',     mode:'best',  ns:[1.5, 2, 3],      text:n => `Bank at ${n}× your stake` },
+  { id:'survive',  metric:'survive',  mode:'best',  ns:[90, 180, 360],   text:n => `Survive ${n}s in one run` },
+  { id:'king',     metric:'king',     mode:'total', ns:[1, 2, 3],        text:n => `Take the crown ${n>1?n+' times':''}`.trim() },
+  { id:'explore',  metric:'regions',  mode:'best',  ns:[2, 3, 5],        text:n => `Visit ${n} regions in one run` },
+  { id:'chests',   metric:'chests',   mode:'total', ns:[1, 3, 5],        text:n => `Coil-crack ${n} chest${n>1?'s':''}` },
+  { id:'vault',    metric:'vault',    mode:'total', ns:[5, 15, 30],      text:n => `Loot ${n} gems from the Vault` },
+  { id:'portal',   metric:'portals',  mode:'total', ns:[1, 3, 6],        text:n => `Jump through ${n} portal${n>1?'s':''}` },
+  { id:'jackpot',  metric:'jackpots', mode:'total', ns:[1, 3, 5],        text:n => `Spin ${n} jackpot machine${n>1?'s':''}` },
+  { id:'gems',     metric:'gems',     mode:'total', ns:[20, 50, 100],    text:n => `Collect ${n} XP gems` },
+  { id:'frenzy',   metric:'frenzy',   mode:'total', ns:[20, 50, 100],    text:n => `Eat ${n} frenzy orbs` },
 ];
 export const MISSION_REWARD = [ {coins:80, xp:60}, {coins:160, xp:120}, {coins:300, xp:220} ];
 

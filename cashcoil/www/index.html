@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Cashcoil">
-<meta name="description" content="Eat. Cut. Cash out. A stake arena snake game.">
+<meta name="description" content="Eat. Cut. Cash out. An open-world stake snake game.">
 <title>Cashcoil</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
@@ -65,6 +65,10 @@
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r=".6"/></svg>
         <span>Missions</span><em class="dot" id="mDot"></em>
       </button>
+      <button data-sheet="map" aria-label="Map">
+        <svg viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg>
+        <span>Map</span><em class="chip" id="mDotMap"></em>
+      </button>
       <button data-sheet="profile" aria-label="Profile">
         <svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>
         <span>Stats</span>
@@ -80,6 +84,8 @@
     <div class="w-sub"><span class="mult" id="wMult">1.00×</span><span>out <b id="wNet">0</b></span></div>
   </div>
   <div class="board" id="board"></div>
+  <div class="ticker" id="ticker"></div>
+  <div class="regiontag" id="regionTag"></div>
   <div class="banner" id="banner"><b></b><small></small></div>
   <div class="killpop" id="killpop"></div>
   <div class="feed" id="feed"></div>
@@ -88,12 +94,12 @@
 
   <button class="btn-cash" id="bCash">
     <svg viewBox="0 0 80 80"><circle class="trk" cx="40" cy="40" r="36"/><circle class="bar" id="cashRing" cx="40" cy="40" r="36"/></svg>
-    <span>HOLD<br><b>CASH OUT</b></span>
+    <span id="cashLbl">BANK<br><b>—</b></span>
   </button>
   <button class="btn-boost" id="bBoost">
     <svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>
   </button>
-  <div class="keys">mouse steer · click / shift sprint · hold <b>space</b> cash out</div>
+  <div class="keys">mouse steer · click / shift sprint · hold <b>space</b> in a bank · <b>M</b> map</div>
 </section>
 
 <!-- ================= RESULT ================= -->
@@ -103,6 +109,10 @@
 <section id="sheet" class="hidden">
   <div class="scrim" id="scrim"></div>
   <div class="card" id="sheetCard"></div>
+</section>
+<section id="mapov" class="hidden">
+  <canvas id="mapCv"></canvas>
+  <div class="mapinfo" id="mapInfo"></div>
 </section>
 <div id="modal" class="hidden"></div>
 <div id="toasts"></div>

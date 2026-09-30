@@ -95,6 +95,17 @@ export const sfx = {
   claim(){ [0, 7, 12, 19].forEach((s, i) => tone(784 * semis(s), .18, 'triangle', .1, null, i * .05)); noise(.3, .05, 8000, .15); },
   boost(){ noise(.18, .06, 2400); },
   deny(){ tone(200, .12, 'square', .06, 140); },
+  gem(){ tone(1568 * semis(Math.random() * 5 | 0), .09, 'sine', .07); },
+  pad(){ tone(440, .18, 'sawtooth', .05, 1320); noise(.15, .05, 5000); },
+  portal(){ tone(200, .5, 'sine', .14, 1600); tone(300, .5, 'triangle', .07, 2400, .05); noise(.4, .08, 3000); },
+  spin(){ noise(.1, .05, 4000); tone(880, .06, 'square', .04); },
+  jackpot(){ [0, 4, 7, 12, 16, 19, 24, 28].forEach((s, i) => tone(523 * semis(s), .2, 'square', .06, null, i * .05)); noise(.8, .08, 8000, .2); },
+  chest(){ noise(.25, .15, 1800); [0, 7, 12, 16].forEach((s, i) => tone(659 * semis(s), .22, 'triangle', .1, null, .05 + i * .06)); },
+  vault(){ tone(110, 1.2, 'sawtooth', .12, 220); [0, 7, 12, 19].forEach((s, i) => tone(392 * semis(s), .5, 'sine', .09, null, .3 + i * .12)); },
+  geyser(){ noise(.9, .16, 900); tone(90, .7, 'sine', .12, 50); },
+  rumble(){ noise(1.2, .18, 260); tone(55, 1.2, 'sine', .2, 40); },
+  emerge(){ noise(.8, .3, 1200); tone(140, .6, 'sawtooth', .18, 40); },
+  discover(){ [0, 5, 9, 12, 17].forEach((s, i) => tone(440 * semis(s), .35, 'sine', .1, null, i * .09)); },
 };
 
 export function buzz(pattern){
