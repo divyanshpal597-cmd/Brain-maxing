@@ -35,6 +35,9 @@ export const G = {
   cashT: 0, endT: 0, eventT: 45, event: null, danger: 0,
   bankIn: null, bankNear: null, bankDist: 0, night: 0, dark: 0, cavesF: 0, viewRegion: REGIONS[0],
   tableStake: 50, showChestTip: false,
+  // journey (story) mode
+  mode: 'arena', paused: false, objects: [], quest: null, bossAggro: false, forceJackpot: 0,
+  huntPlayer: true, claimed: new Set(), ouro: null,
   hooks: {},
 };
 
@@ -189,6 +192,7 @@ class Snake {
   /* --- bot brain --- */
   think(dt){
     if (this.isBoss) return bossThink(this, dt);
+    if (this.npc) return npcThink(this, dt);
     const h = this.head();
     let steer = null;
     this.slow = 1;
@@ -223,7 +227,7 @@ class Snake {
     if (steer !== null){ this.targetAngle = steer; return; }
 
     // 3. rich? head to a bank and cash out
-    if (this.cash >= this.entry * 1.8){
+    if (this.entry > 0 && this.cash >= this.entry * 1.8){
       if (!this.bank) this.bank = nearestBank(h.x, h.y).bank;
       const b = this.bank, d = Math.hypot(b.x - h.x, b.y - h.y);
       if (d < b.r * .75){
@@ -241,7 +245,7 @@ class Snake {
         this.prey = null;
         let best = null, bd = 760;
         for (const s of G.snakes){
-          if (s === this || !s.alive || s.shield > 0 || s.hidden || s.isBoss) continue;
+          if (s === this || !s.alive || s.shield > 0 || s.hidden || s.isBoss || s.npc || (s.isPlayer && !G.huntPlayer)) continue;
           if (s.radius > this.radius * 1.25) continue;
           const sh = s.head(), d = Math.hypot(sh.x - h.x, sh.y - h.y) * (s.isPlayer ? .7 : 1) * (s === G.king ? .7 : 1);
           if (d < bd){ bd = d; best = s; }
@@ -301,7 +305,7 @@ function makeBoss(){
 function bossThink(b, dt){
   const h = b.head(), p = G.player;
   const pp = p && p.alive && G.state === 'playing' ? p.head() : null;
-  const chase = pp && regionAt(pp.x, pp.y) === REG.desert && Math.hypot(pp.x - h.x, pp.y - h.y) < 1500;
+  const chase = pp && regionAt(pp.x, pp.y) === REG.desert && Math.hypot(pp.x - h.x, pp.y - h.y) < (G.bossAggro ? 2600 : 1500);
   b.thinkT -= dt;
   let tx, ty;
   if (chase){
@@ -332,6 +336,58 @@ function bossThink(b, dt){
     if (near){ sfx.emerge(); G.shake = Math.max(G.shake, 12); buzz(120); }
   }
 }
+/* ============================================================
+   Story NPCs — they run from you and stay in their home region
+   ============================================================ */
+export function spawnNPC({ name, skin, region, near, mass = 60 }){
+  let p = null;
+  for (let k = 0; k < 40 && !p; k++){
+    const q = near ? { x: near.x + rand(-700, 700), y: near.y + rand(-700, 700) } : randomLand(Math.random, region, 60);
+    if (terrainAt(q.x, q.y) === T_LAND && regionAt(q.x, q.y) === region && !rockHit(q.x, q.y, 60)
+        && (!G.player || dist(q, G.player.head()) > 450)) p = q;
+  }
+  p = p || randomLand(Math.random, region, 60);
+  const s = new Snake(p.x, p.y, 0, name, skin, false);
+  Object.assign(s, { npc: true, home: region, mass, shield: 1, born: G.t });
+  for (let i = 0; i < 40; i++) s.update(1 / 60);
+  G.snakes.push(s);
+  return s;
+}
+function npcThink(s, dt){
+  const h = s.head(), p = G.player && G.player.alive ? G.player : null;
+  s.thinkT -= dt;
+  s.slow = G.t - s.born > 80 ? .78 : 1;          // he tires out eventually
+  if (s.mass < 40) s.mass = 40;
+  let steer = null;
+  const look = s.radius * 4 + 80;
+  for (const k of [.5, 1]){
+    const ax = h.x + Math.cos(s.angle) * look * k, ay = h.y + Math.sin(s.angle) * look * k;
+    const t = terrainAt(ax, ay);
+    if (t === T_DEEP || t === T_LAVA || rockHit(ax, ay, s.radius * .8) || regionAt(ax, ay) !== s.home){
+      steer = Math.atan2(s.home.y - h.y, s.home.x - h.x) + s.dodge * .6; break;
+    }
+  }
+  if (steer === null && Math.random() < .45){      // clumsy: only half-watches for bodies
+    const ax = h.x + Math.cos(s.angle) * look, ay = h.y + Math.sin(s.angle) * look;
+    for (const o of G.snakes){
+      if (o === s || !o.alive || o.isPlayer) continue;
+      if (o.segs.some(g => (g.x - ax) ** 2 + (g.y - ay) ** 2 < (o.radius + s.radius + 20) ** 2)){ steer = s.angle + s.dodge * 1.4; break; }
+    }
+  }
+  if (steer === null && p){
+    const ph = p.head(), d = dist(ph, h);
+    if (d < 850){
+      steer = Math.atan2(h.y - ph.y, h.x - ph.x) + Math.sin(G.t * 1.7 + s.dodge) * .7;
+      s.boosting = d < 380 && G.t - s.born < 80;
+    } else {
+      s.boosting = false;
+      if (!s.goal || s.thinkT <= 0){ s.goal = randomLand(Math.random, s.home); s.thinkT = 4; }
+      steer = Math.atan2(s.goal.y - h.y, s.goal.x - h.x); s.slow *= .6;
+    }
+  }
+  if (steer !== null) s.targetAngle = steer;
+}
+
 function dust(x, y, n){
   for (let i = 0; i < n; i++){
     const a = rand(0, TAU), sp = rand(60, 320);
@@ -461,6 +517,7 @@ const botCount = () => { let n = 0; for (const s of G.snakes) if (s.alive && !s.
 export function startRun(stake, skin){
   // a fresh table: everyone buys in at your stake, no loose cash anywhere
   G.tableStake = stake;
+  G.mode = 'arena'; G.objects = []; G.quest = null; G.bossAggro = false; G.huntPlayer = true; G.forceJackpot = 0;
   G.snakes = G.snakes.filter(s => s.isBoss && s.alive);
   G.orbs = G.orbs.filter(o => o.kind !== 'cash');
   G.particles = []; G.floats = [];
@@ -480,6 +537,30 @@ export function startRun(stake, skin){
   G.state = 'playing';
 }
 
+/** story mode: no stakes, no money — just you, the island and the Scales */
+export function startJourney(skin, at, mass){
+  G.mode = 'journey'; G.tableStake = 0;
+  G.snakes = G.snakes.filter(s => s.isBoss && s.alive);
+  G.orbs = G.orbs.filter(o => o.kind !== 'cash');
+  G.particles = []; G.floats = [];
+  let p = at;
+  for (let k = 0; k < 30 && (terrainAt(p.x, p.y) !== T_LAND || rockHit(p.x, p.y, 60)); k++) p = { x: at.x + rand(-160, 160), y: at.y + rand(-160, 160) };
+  const pl = new Snake(p.x, p.y, 0, 'You', skin, true);
+  pl.mass = Math.max(12, mass || 12);
+  for (let i = 0; i < 60; i++){ pl.update(1 / 60); }
+  G.player = pl; G.snakes.push(pl);
+  while (botCount() < BOT_COUNT - 8) addBot();
+  G.run = { stake: 0, t0: G.t, kills: 0, eaten: 0, frenzy: 0, boostT: 0, peak: 0,
+            combo: 0, lastKill: -99, wasKing: 0, kingNow: false, bestCombo: 0,
+            gems: 0, vault: 0, chests: 0, portals: 0, jackpots: 0, region: null, regions: new Set(),
+            nightSeen: false, vaultWarn: false };
+  G.cashT = 0; G.shake = 0; G.paused = false;
+  G.input.boost = G.input.cash = false; G.input.angle = null;
+  G.cam.x = p.x; G.cam.y = p.y;
+  G.state = 'playing';
+}
+export const runSnapshot = () => G.run ? runSummary(false, {}) : null;
+
 function runSummary(win, extra){
   const r = G.run, t = G.t - r.t0;
   return { win, stake: r.stake, kills: r.kills, eaten: r.eaten, frenzy: r.frenzy,
@@ -495,7 +576,9 @@ function kill(s, killer, cause){
   burst(h.x, h.y, 24, s.skin.hue, false, 360);
   const cash = s.cash, wasKing = s === G.king;
   if (cash > 0.5) burst(h.x, h.y, 20, undefined, true, 280);
-  spillCash(s); spillMass(s);
+  if (s.cash > 0) spillCash(s);
+  spillMass(s);
+  G.hooks.died && G.hooks.died(s, killer, cause, h);
 
   if (killer && killer.isPlayer && !s.isPlayer && G.run) creditKill(s, cash, wasKing);
   if (s.isPlayer){
@@ -503,7 +586,7 @@ function kill(s, killer, cause){
     G.result = runSummary(false, { killer: killer ? killer.name : null, cause, nearMiss: G.cashT });
     G.shake = 16; G.flash = .35;
     sfx.death(); buzz([60, 40, 180]);
-  } else if (G.state === 'playing' && G.hooks.feed && G.player && dist(h, G.player.head()) < 1400){
+  } else if (G.state === 'playing' && G.mode === 'arena' && G.hooks.feed && G.player && dist(h, G.player.head()) < 1400){
     G.hooks.feed(killer ? `${killer.isPlayer ? 'You' : killer.name} ${killer.isBoss ? 'swallowed' : 'cut off'} ${s.name}`
                         : `${s.name} ${cause === 'the lava' ? 'melted in lava' : cause === 'the deep water' ? 'drowned' : 'died'}`, cash);
   }
@@ -588,6 +671,7 @@ function feed(dt){
 }
 
 function eat(s, o){
+  if (s.isPlayer && G.hooks.eat) G.hooks.eat(o);
   if (o.kind === 'cash'){
     s.cash += o.value;
     burst(o.x, o.y, 6, undefined, true, 130);
@@ -640,7 +724,31 @@ function stepFeatures(dt){
   for (const c of world.chests){
     if (c.open){ c.respawn -= dt; if (c.respawn <= 0){ c.open = false; c.coil = 0; } continue; }
     c.coil = pl ? coilAround(pl, c) : 0;
-    if (c.coil >= .97) crackChest(c);
+    if (c.coil >= .9) crackChest(c);
+  }
+
+  // story objects
+  if (pl) for (const o of G.objects){
+    if (o.done) continue;
+    const ph = pl.head(), d = dist(o, ph);
+    if (o.type === 'shrine'){
+      if (o.active === false){ o.coil = 0; continue; }
+      o.coil = coilAround(pl, o);
+      if (o.coil >= .9){
+        o.done = true; o.coil = 1;
+        burst(o.x, o.y, 60, 44, true, 420); burst(o.x, o.y, 40, 160, false, 360);
+        G.shake = 10; G.flash = .4; sfx.discover(); buzz([30, 40, 30, 40, 90]);
+        G.hooks.story && G.hooks.story('coil', o);
+      }
+    } else if (o.type === 'gate'){
+      if (o.next && d < o.r){ o.done = true; burst(o.x, o.y, 26, 196, false, 260); sfx.pad(); buzz(15); G.hooks.story && G.hooks.story('gate', o); }
+    } else if (d < o.r + pl.radius){
+      o.done = true;
+      burst(o.x, o.y, 36, o.type === 'beacon' ? 280 : 44, o.type !== 'beacon', 320);
+      floatText(o.x, o.y - 40, o.label || 'GOT IT', '#ffe08a', 17, 1.3);
+      G.shake = Math.max(G.shake, 5); sfx.chest(); buzz([20, 30, 40]);
+      G.hooks.story && G.hooks.story('touch', o);
+    }
   }
 
   // jackpot machines (Neon Strip)
@@ -665,6 +773,7 @@ function stepFeatures(dt){
     }
     if (v.t <= 0){
       v.state = 'open'; v.t = VAULT_OPEN; v.drip = 0;
+      G.hooks.vault && G.hooks.vault('open');
       if (G.state === 'playing'){ sfx.vault(); G.hooks.banner && G.hooks.banner('THE VAULT IS OPEN', 'Get to the Sunken Ruins — follow the green arrow', 'mint'); }
     }
   } else {
@@ -760,6 +869,7 @@ function crackChest(c){
   scatterOrbs(c.x, c.y, mass, 20, 130, 'food', 5, 44);
   burst(c.x, c.y, 40, 160, false, 360); burst(c.x, c.y, 20, undefined, true, 260);
   if (G.run){ G.run.chests++; }
+  G.hooks.chest && G.hooks.chest(c);
   floatText(c.x, c.y - 40, ['CHEST CRACKED', 'IRON CHEST!', 'GOLDEN CHEST!'][c.tier], '#5df2c0', 18, 1.4);
   G.shake = Math.max(G.shake, 6);
   sfx.chest(); buzz([20, 30, 20, 30, 60]);
@@ -767,8 +877,10 @@ function crackChest(c){
 
 const REEL = ['7', '★', '◆', '♥'];
 function payJackpot(m){
-  const r = Math.random();
+  let r = Math.random();
+  if (G.forceJackpot > 0 && --G.forceJackpot === 0) r = 0;   // the story rigs the third spin
   const pl = G.player;
+  G.hooks.jackpot && G.hooks.jackpot(r < .1, m);
   if (G.run) G.run.jackpots++;
   if (r < .1){
     m.reels = [0, 0, 0];
@@ -833,7 +945,7 @@ function stepPlaying(dt){
 
   const nb = nearestBank(h.x, h.y);
   G.bankNear = nb.bank; G.bankDist = nb.dist;
-  G.bankIn = nb.dist < nb.bank.r ? nb.bank : null;
+  G.bankIn = G.mode === 'arena' && nb.dist < nb.bank.r ? nb.bank : null;
 
   if (G.input.cash && p.shield <= 0 && G.bankIn){
     const before = G.cashT;
@@ -847,7 +959,7 @@ function stepPlaying(dt){
     if (Math.floor(before * 4) !== Math.floor(G.cashT * 4)) sfx.cashTick(G.cashT / CASHOUT_TIME);
     if (G.cashT >= CASHOUT_TIME){ cashOut(p, G.bankIn); }
   } else {
-    if (G.input.cash && !G.bankIn && (!G.noBankT || G.t - G.noBankT > 3)){
+    if (G.mode === 'arena' && G.input.cash && !G.bankIn && (!G.noBankT || G.t - G.noBankT > 3)){
       G.noBankT = G.t; sfx.deny();
       G.hooks.banner && G.hooks.banner('NO BANK HERE', `${nb.bank.name} is ${meters(nb.dist)} away — follow the gold arrow`, 'coral');
     }
@@ -869,7 +981,7 @@ function stepPlaying(dt){
     G.hooks.region && G.hooks.region(R);
   }
 
-  const isKing = G.king === p;
+  const isKing = G.mode === 'arena' && G.king === p;
   if (isKing && !r.kingNow){
     r.wasKing++;
     sfx.crown(); buzz([15, 30, 15]);
@@ -888,8 +1000,8 @@ function stepPlaying(dt){
 function followCam(dt){
   const p = G.player, h = p.head();
   const scale = clamp(Math.sqrt(W * H) / 950, .72, 1.05);
-  const tz = clamp(30 / (p.radius + 20), 0.36, 1.05) * scale;
-  G.zoom += (tz - G.zoom) * Math.min(1, dt * 2.5);
+  const tz = G.ouro ? .3 * scale : clamp(30 / (p.radius + 20), 0.36, 1.05) * scale;   // pull back for the finale
+  G.zoom += (tz - G.zoom) * Math.min(1, dt * (G.ouro ? .8 : 2.5));
   G.cam.x += (h.x - G.cam.x) * Math.min(1, dt * 9);
   G.cam.y += (h.y - G.cam.y) * Math.min(1, dt * 9);
 }
@@ -911,6 +1023,7 @@ let last = 0;
 function frame(now){
   let dt = Math.min(0.034, (now - last) / 1000 || 0);
   last = now;
+  if (G.paused){ if (G.ouro && G.player){ G.t += 1 / 60; followCam(1 / 60); } draw(0); if (G.hooks.frame) G.hooks.frame(0); requestAnimationFrame(frame); return; }
   if (G.state === 'ending' && G.result && !G.result.win) dt *= .3;
   G.t += dt;
 
@@ -1067,8 +1180,9 @@ function draw(dt){
 
   if (G.state === 'playing'){
     const v = world.vault;
-    if (G.bankNear && !G.bankIn) edgeArrow(G.bankNear, '#f7c14b', 'BANK ' + meters(G.bankDist), 'bank');
-    if (G.king && G.king !== G.player) edgeArrow(G.king.head(), '#ffdf8a', fmt(G.king.cash), 'crown');
+    if (G.mode === 'arena' && G.bankNear && !G.bankIn) edgeArrow(G.bankNear, '#f7c14b', 'BANK ' + meters(G.bankDist), 'bank');
+    if (G.mode === 'arena' && G.king && G.king !== G.player) edgeArrow(G.king.head(), '#ffdf8a', fmt(G.king.cash), 'crown');
+    if (G.quest) edgeArrow(G.quest, '#d6b8ff', G.quest.label + ' · ' + meters(G.player ? dist(G.quest, G.player.head()) : 0), 'quest');
     if (G.event) edgeArrow(G.event, '#38e1ff', 'FRENZY', null);
     if (v.state === 'open' || v.t < 30) edgeArrow(v, '#5df2c0', v.state === 'open' ? 'VAULT OPEN' : 'VAULT ' + Math.ceil(v.t) + 's', null);
     drawMinimap();
@@ -1091,9 +1205,11 @@ function label(text, x, y, size, color){
 function drawLandmarks(L, T, R, B, t, ph){
   const vis = (o, r) => o.x + r > L && o.x - r < R && o.y + r > T && o.y - r < B;
 
+  drawShrines(L, T, R, B, t, vis);
+
   // banks
   for (const b of world.banks){
-    if (!vis(b, b.r + 80)) continue;
+    if (G.mode === 'journey' || !vis(b, b.r + 80)) continue;
     const inside = G.bankIn === b;
     ctx.fillStyle = `rgba(247,193,75,${inside ? .2 : .07 + .03 * Math.sin(t * 3)})`;
     ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill();
@@ -1224,6 +1340,108 @@ function drawLandmarks(L, T, R, B, t, ph){
     }
   }
 }
+const SCALE_HUE = { nest: 44, tundra: 196, caves: 280, neon: 320, magma: 18, ruins: 40, wild: 110, marsh: 170, desert: 30 };
+function drawScale(x, y, s, hue, t){
+  ctx.save(); ctx.translate(x, y); ctx.rotate(Math.sin(t * 1.5) * .25);
+  const gr = ctx.createRadialGradient(0, 0, 0, 0, 0, s * 2.6);
+  gr.addColorStop(0, `hsla(${hue} 100% 75% / .6)`); gr.addColorStop(1, `hsla(${hue} 100% 60% / 0)`);
+  ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(0, 0, s * 2.6, 0, TAU); ctx.fill();
+  ctx.fillStyle = `hsl(${hue} 90% 62%)`;
+  ctx.beginPath(); ctx.moveTo(0, -s); ctx.quadraticCurveTo(s * .9, -s * .2, 0, s); ctx.quadraticCurveTo(-s * .9, -s * .2, 0, -s); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.55)';
+  ctx.beginPath(); ctx.moveTo(0, -s); ctx.quadraticCurveTo(s * .45, -s * .3, 0, s * .6); ctx.quadraticCurveTo(-s * .1, 0, 0, -s); ctx.fill();
+  ctx.restore();
+}
+function coilRing(x, y, r, k){
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(214,184,255,.22)'; ctx.lineWidth = 7 / G.zoom;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke();
+  if (k > .02){ ctx.strokeStyle = '#d6b8ff'; ctx.beginPath(); ctx.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + TAU * k); ctx.stroke(); }
+}
+function drawShrines(L, T, R, B, t, vis){
+  for (const s of Object.values(world.shrines)){
+    if (!vis(s, 300)) continue;
+    const claimed = G.claimed.has(s.key), hue = SCALE_HUE[s.key];
+    ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.arc(s.x, s.y, 120, 0, TAU); ctx.fill();
+    ctx.strokeStyle = claimed ? `hsla(${hue} 80% 60% / .8)` : 'rgba(200,190,160,.35)'; ctx.lineWidth = 10;
+    ctx.beginPath(); ctx.arc(s.x, s.y, 110, 0, TAU); ctx.stroke();
+    for (let i = 0; i < 6; i++){
+      const a = i / 6 * TAU + .3, x = s.x + Math.cos(a) * 110, y = s.y + Math.sin(a) * 110;
+      ctx.fillStyle = claimed ? `hsl(${hue} 60% 55%)` : '#6e6a5a'; ctx.beginPath(); ctx.arc(x, y, 13, 0, TAU); ctx.fill();
+    }
+    ctx.fillStyle = '#4a4636'; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TAU); ctx.fill();
+    if (claimed){
+      const gr = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, 90);
+      gr.addColorStop(0, `hsla(${hue} 100% 70% / ${.45 + .15 * Math.sin(t * 2)})`); gr.addColorStop(1, `hsla(${hue} 100% 60% / 0)`);
+      ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(s.x, s.y, 90, 0, TAU); ctx.fill();
+      drawScale(s.x, s.y - 6, 16, hue, t);
+    }
+  }
+  const e = world.egg;
+  if (vis(e, 600)){
+    const n = G.claimed.size;
+    ctx.strokeStyle = 'rgba(247,193,75,.25)'; ctx.lineWidth = 8;
+    ctx.beginPath(); ctx.arc(e.x, e.y, 150, 0, TAU); ctx.stroke();
+    for (let i = 0; i < 9; i++){
+      const a = i / 9 * TAU - Math.PI / 2, x = e.x + Math.cos(a) * 150, y = e.y + Math.sin(a) * 150;
+      ctx.fillStyle = i < n ? '#f7c14b' : 'rgba(120,110,80,.6)';
+      ctx.beginPath(); ctx.arc(x, y, i < n ? 11 + Math.sin(t * 3 + i) * 2 : 9, 0, TAU); ctx.fill();
+    }
+    const gr = ctx.createRadialGradient(e.x - 10, e.y - 16, 4, e.x, e.y, 46);
+    gr.addColorStop(0, '#fff8e0'); gr.addColorStop(.6, n >= 9 ? '#ffd76a' : '#d8cfb4'); gr.addColorStop(1, n >= 9 ? '#b8821c' : '#8a8068');
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.ellipse(e.x, e.y, 32, 42, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(e.x - 20, e.y - 4); ctx.lineTo(e.x - 6, e.y + 6); ctx.lineTo(e.x + 6, e.y - 6); ctx.lineTo(e.x + 18, e.y + 4); ctx.stroke();
+    label('THE WORLD EGG', e.x, e.y - 175 / 1, 13, 'rgba(255,230,170,.8)');
+  }
+
+  // story objects
+  for (const o of G.objects){
+    if (!vis(o, 260)) continue;
+    if (o.type === 'shrine'){ if (!o.done) coilRing(o.x, o.y, o.ring || 64, o.coil || 0); continue; }
+    if (o.done && o.type !== 'beacon') continue;
+    if (o.type === 'gate'){
+      const a = o.a || 0, px = Math.cos(a + Math.PI / 2) * o.r, py = Math.sin(a + Math.PI / 2) * o.r;
+      const col = o.done ? 'rgba(140,200,230,.25)' : o.next ? '#8fe4ff' : 'rgba(170,220,255,.5)';
+      ctx.strokeStyle = col; ctx.lineWidth = o.next ? 8 : 5; ctx.setLineDash(o.next ? [] : [14, 10]);
+      ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+      for (const sgn of [-1, 1]){ ctx.fillStyle = col; ctx.beginPath(); ctx.arc(o.x + px * sgn, o.y + py * sgn, 14, 0, TAU); ctx.fill(); }
+      if (!o.done) label(String(o.n), o.x, o.y + 8 / G.zoom, o.next ? 22 : 15, col);
+    } else if (o.type === 'beacon'){
+      const lit = o.done, k = lit ? 1 : .35 + .2 * Math.sin(t * 3 + o.x);
+      const gr = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, lit ? 260 : 90);
+      gr.addColorStop(0, `rgba(200,160,255,${.6 * k})`); gr.addColorStop(1, 'rgba(160,120,255,0)');
+      ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(o.x, o.y, lit ? 260 : 90, 0, TAU); ctx.fill();
+      ctx.fillStyle = lit ? '#f4e8ff' : '#7a5ab8';
+      ctx.beginPath(); ctx.moveTo(o.x, o.y - 30); ctx.lineTo(o.x + 18, o.y); ctx.lineTo(o.x, o.y + 30); ctx.lineTo(o.x - 18, o.y); ctx.closePath(); ctx.fill();
+    } else {
+      // relic / shard / core: a floating scale with a light pillar
+      const hue = o.hue ?? 44;
+      ctx.fillStyle = `hsla(${hue} 100% 70% / .12)`; ctx.fillRect(o.x - 14, o.y - 400, 28, 400);
+      drawScale(o.x, o.y + Math.sin(t * 3 + o.x) * 5, 14, hue, t);
+    }
+  }
+  if (G.ouro) drawOuro(t);
+}
+function drawOuro(t){
+  const o = G.ouro, k = Math.min(1, (G.t - o.t0) / 3), e = world.egg;
+  const R = 420 + (1 - k) * 600, n = 90;
+  ctx.globalAlpha = k;
+  for (let i = n - 1; i >= 0; i--){
+    const a = t * .4 + i / n * TAU * .92, x = e.x + Math.cos(a) * R, y = e.y + Math.sin(a) * R;
+    ctx.fillStyle = segColor({ kind: 'shine', a: '#f7c14b', b: '#e0a82e' }, i, t);
+    ctx.beginPath(); ctx.arc(x, y, 62 * (1 - i / n * .55), 0, TAU); ctx.fill();
+  }
+  const a = t * .4, hx = e.x + Math.cos(a) * R, hy = e.y + Math.sin(a) * R;
+  ctx.fillStyle = '#ffe08a'; ctx.beginPath(); ctx.arc(hx, hy, 72, 0, TAU); ctx.fill();
+  for (const s of [-1, 1]){
+    const ex = hx + Math.cos(a + Math.PI / 2 + s * .5) * 22, ey = hy + Math.sin(a + Math.PI / 2 + s * .5) * 22;
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ex, ey, 11, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#2a1a04'; ctx.beginPath(); ctx.arc(ex, ey, 5, 0, TAU); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
 function roundRect(x, y, w, h, r){
   ctx.beginPath();
   ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
@@ -1305,6 +1523,14 @@ function drawSnake(s, alpha){
   let y = h.y - r * 1.1 - 8 / z;
   ctx.globalAlpha = alpha;
   ctx.textAlign = 'center';
+  if (G.mode === 'journey'){
+    if (!s.isPlayer){
+      ctx.font = `${s.npc ? 700 : 500} ${(s.npc ? 13 : 11) / z}px "Space Grotesk", system-ui, sans-serif`;
+      ctx.fillStyle = s.npc ? '#ffd76a' : 'rgba(210,218,235,.55)'; ctx.fillText(s.name, h.x, y);
+    }
+    ctx.globalAlpha = 1;
+    return;
+  }
   ctx.font = `700 ${fs}px "Space Grotesk", system-ui, sans-serif`;
   ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillText(fmt(s.cash), h.x, y + 1.5 / z);
   ctx.fillStyle = s.isPlayer ? '#ffffff' : '#f7c14b'; ctx.fillText(fmt(s.cash), h.x, y);
@@ -1381,6 +1607,7 @@ function edgeArrow(pos, color, text, icon){
   ctx.restore();
   const lx = -Math.cos(ang) * 32, ly = -Math.sin(ang) * 32;
   if (icon === 'crown') drawCrown(lx, ly - 16, 7);
+  if (icon === 'quest') drawScale(lx, ly - 18, 8, 270, G.t);
   if (icon === 'bank'){
     ctx.fillStyle = color; ctx.beginPath(); ctx.arc(lx, ly - 16, 7, 0, TAU); ctx.fill();
     ctx.fillStyle = '#6b4a0c'; ctx.beginPath(); ctx.arc(lx, ly - 16, 3, 0, TAU); ctx.fill();
@@ -1407,12 +1634,13 @@ function drawMinimap(){
   ctx.globalAlpha = .9;
   ctx.drawImage(world.mini, x, y, size, size);
   ctx.globalAlpha = 1;
-  for (const b of world.banks){ ctx.fillStyle = '#f7c14b'; ctx.fillRect(tx(b.x) - 2.5, ty(b.y) - 2.5, 5, 5); }
+  if (G.mode === 'arena') for (const b of world.banks){ ctx.fillStyle = '#f7c14b'; ctx.fillRect(tx(b.x) - 2.5, ty(b.y) - 2.5, 5, 5); }
   const v = world.vault;
   ctx.fillStyle = v.state === 'open' ? '#5df2c0' : 'rgba(220,200,150,.7)';
   ctx.beginPath(); ctx.arc(tx(v.x), ty(v.y), v.state === 'open' ? 4 + Math.sin(G.t * 6) : 2.5, 0, TAU); ctx.fill();
   if (G.event){ ctx.fillStyle = 'rgba(56,225,255,.8)'; ctx.beginPath(); ctx.arc(tx(G.event.x), ty(G.event.y), 3.5, 0, TAU); ctx.fill(); }
   if (G.king && G.king !== G.player){ const h = G.king.head(); ctx.fillStyle = '#ffdf8a'; ctx.beginPath(); ctx.arc(tx(h.x), ty(h.y), 3, 0, TAU); ctx.fill(); }
+  if (G.quest){ ctx.fillStyle = '#d6b8ff'; ctx.beginPath(); ctx.arc(tx(G.quest.x), ty(G.quest.y), 4 + Math.sin(G.t * 5), 0, TAU); ctx.fill(); }
   if (G.boss && G.boss.phase === 'surface'){ const h = G.boss.head(); ctx.fillStyle = '#ff5a4d'; ctx.beginPath(); ctx.arc(tx(h.x), ty(h.y), 3.4, 0, TAU); ctx.fill(); }
   if (G.player && G.player.alive){
     const h = G.player.head(), a = G.player.angle;
@@ -1443,5 +1671,8 @@ export function initGame(canvas){
   requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
 }
 
-export function toMenu(){ G.state = 'menu'; G.player = null; G.run = null; G.bankIn = null; G.danger = 0; }
+export function toMenu(){
+  G.state = 'menu'; G.player = null; G.run = null; G.bankIn = null; G.danger = 0; G.paused = false;
+  G.objects = []; G.quest = null; G.bossAggro = false; G.forceJackpot = 0;
+}
 export const viewport = () => ({ W, H });

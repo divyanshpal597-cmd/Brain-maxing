@@ -5,8 +5,10 @@ import { STAKES, SKINS, RAKE, CASHOUT_TIME, REFILL, DAILY_LADDER, xpForLevel, GE
 import { P, save, stake, shiftStake, addXP, levelProgress, skinUnlocked, dailyReady, dailyPreview,
          claimDaily, streak, missions, missionDef, missionReward, missionsClaimable, trackMissions,
          claimMission, msToMidnight } from './store.js';
-import { G, initGame, startRun, toMenu, segColor, fmt, meters, minimapRect } from './game.js';
-import { world, REGIONS, drawMap, HALF } from './world.js';
+import { G, initGame, startRun, startJourney, runSnapshot, toMenu, segColor, fmt, meters, minimapRect } from './game.js';
+import { initStory, begin as storyBegin, tick as storyTick, onEvent as storyEvent, questText, checkpoint,
+         SPEAKERS, PROLOGUE, SCALE_KEYS } from './story.js';
+import { world, REGIONS, REG, drawMap, HALF } from './world.js';
 import { sfx, buzz, unlockAudio } from './fx.js';
 
 const $ = id => document.getElementById(id);
@@ -20,6 +22,8 @@ const els = {
   killpop: $('killpop'), feed: $('feed'), shieldTag: $('shieldTag'), shieldT: $('shieldT'),
   joy: $('joy'), knob: $('knob'), bCash: $('bCash'), bBoost: $('bBoost'), cashRing: $('cashRing'),
   region: $('regionTag'), ticker: $('ticker'), cashLbl: $('cashLbl'), mapov: $('mapov'), mapCv: $('mapCv'), mapInfo: $('mapInfo'),
+  quest: $('quest'), gTimer: $('gTimer'), pauseBtn: $('pauseBtn'), hJourney: $('hJourney'), hStake: $('hStake'),
+  dialog: $('dialog'), dFace: $('dFace'), dName: $('dName'), dText: $('dText'),
   sheet: $('sheet'), sheetCard: $('sheetCard'), scrim: $('scrim'), modal: $('modal'), toasts: $('toasts'),
 };
 
@@ -102,9 +106,25 @@ function renderHome(animateCoins = false){
   els.stDown.disabled = P.stakeIdx === 0;
   els.stUp.disabled = P.stakeIdx === STAKES.length - 1;
 
-  const broke = P.coins < STAKES[0];
-  els.play.classList.toggle('refill', broke);
-  els.play.firstElementChild.textContent = broke ? `FREE REFILL +${REFILL}` : P.coins < s ? 'LOWER STAKE' : 'PLAY';
+  const journey = P.mode === 'journey';
+  document.querySelectorAll('#hModes button').forEach(b => b.classList.toggle('on', b.dataset.mode === P.mode));
+  els.hStake.classList.toggle('hidden', journey);
+  els.hJourney.classList.toggle('hidden', !journey);
+  $('hTag').textContent = journey ? 'journey of the nine scales' : 'eat · cut · cash out';
+  if (journey){
+    const q = questText(), S = P.story;
+    els.hJourney.innerHTML = `
+      <small>${S.prologue ? q.chapter : 'Prologue'}</small>
+      <b>${S.prologue ? q.title : 'An egg in the Nest'}</b>
+      <span>${S.prologue ? q.text + (q.prog ? ' · ' + q.prog : '') : 'A small egg is about to crack…'}</span>
+      ${pipsHTML()}`;
+    els.play.classList.remove('refill');
+    els.play.firstElementChild.textContent = S.done ? 'FREE ROAM' : S.prologue ? 'CONTINUE' : 'BEGIN JOURNEY';
+  } else {
+    const broke = P.coins < STAKES[0];
+    els.play.classList.toggle('refill', broke);
+    els.play.firstElementChild.textContent = broke ? `FREE REFILL +${REFILL}` : P.coins < s ? 'LOWER STAKE' : 'PLAY';
+  }
 
   $('mDotMap').textContent = `${P.discovered.length}/${REGIONS.length}`;
   const n = missionsClaimable();
@@ -126,6 +146,8 @@ setInterval(() => { if (G.state === 'menu') renderDaily(); }, 30000);
 
 function showHome(){
   toMenu();
+  document.body.classList.remove('journey');
+  if (dlg){ clearInterval(dlg.iv); dlg = null; els.dialog.classList.add('hidden'); }
   els.result.classList.add('hidden');
   els.hud.classList.add('hidden');
   els.home.classList.remove('hidden');
@@ -157,8 +179,14 @@ els.stUp.onclick   = () => changeStake(1);
   });
 }
 
+document.querySelectorAll('#hModes button').forEach(b => b.onclick = () => {
+  if (P.mode === b.dataset.mode) return;
+  P.mode = b.dataset.mode; save(); sfx.tap(); buzz(8); renderHome();
+});
+
 els.play.onclick = () => {
   unlockAudio();
+  if (P.mode === 'journey'){ beginJourney(); return; }
   if (P.coins < STAKES[0]){
     P.coins += REFILL; save(); sfx.claim(); flyCoins(els.play, 10);
     setTimeout(() => renderHome(true), 700);
@@ -176,10 +204,210 @@ document.querySelectorAll('.dock button').forEach(b => b.onclick = () => { unloc
 $('hLevel').onclick = () => { unlockAudio(); sfx.tap(); openSheet('profile'); };
 
 /* ============================================================
+   JOURNEY
+   ============================================================ */
+const SCALE_HUE = { nest: 44, tundra: 196, caves: 280, neon: 320, magma: 18, ruins: 40, wild: 110, marsh: 170, desert: 30 };
+const pipsHTML = () => `<div class="pips">${SCALE_KEYS.map(k => `<i class="${P.story.scales.includes(k) ? 'on' : ''}" style="--h:${SCALE_HUE[k]}"></i>`).join('')}</div>`;
+const FALL_LINES = [
+  ['moss', 'Up you get, little one. Scales don’t carry themselves.'],
+  ['moss', 'Every great serpent fell a hundred times. You’re at… let’s not count.'],
+  ['moss', 'Shake it off. The island is patient — mostly.'],
+  ['moss', 'That looked painful. Try going around it next time?'],
+];
+
+initStory(P.story, {
+  save,
+  banner: (a, b, k) => banner(a, b, k),
+  quest: () => renderQuest(),
+  timer: t => {
+    els.gTimer.classList.toggle('on', t !== null && t !== undefined);
+    if (t !== null && t !== undefined){ els.gTimer.textContent = Math.max(0, t).toFixed(1) + 's'; els.gTimer.classList.toggle('low', t < 10); }
+  },
+  dialog: (lines, cb) => dialog(lines, cb),
+  scale: (ch, n) => {
+    sfx.levelup(); buzz([30, 50, 30, 50, 120]);
+    banner(`SCALE ${n} / 9`, `${REG[ch.region].name} Scale restored · +250 XP`, 'gold');
+    const ups = addXP(250);
+    ups.forEach(u => toast(`<b>LEVEL ${u.level}</b> · +${fmt(u.coins)} coins${u.skin ? ` · ${u.skin.name} skin unlocked` : ''}`, 'gold'));
+    renderQuest();
+  },
+  finale: () => showFinale(),
+});
+
+let deadMass = 12;
+function beginJourney(){
+  unlockAudio();
+  closeSheet();
+  els.home.classList.add('hidden');
+  els.result.classList.add('hidden');
+  els.hud.classList.remove('hidden');
+  document.body.classList.add('journey');
+  cv.classList.remove('dim');
+  els.feed.innerHTML = ''; els.killpop.innerHTML = '';
+  runNew = [];
+  P.stats.games++; save();
+  const skin = SKINS.find(s => s.id === P.skin) || SKINS[0];
+  startJourney(skin, checkpoint(), P.story.mass);
+  storyBegin();
+  G.showChestTip = true;
+  renderQuest();
+  sfx.tap(); buzz(15);
+  if (!P.story.prologue){
+    P.story.prologue = true; save();
+    dialog(PROLOGUE);
+    if (TOUCH) setTimeout(() => banner('DRAG TO STEER', 'Tap ⚡ to sprint · tap the minimap for the map', 'gold'), 200);
+  }
+}
+
+function renderQuest(){
+  const q = questText();
+  if (!q) return;
+  els.quest.innerHTML = `<small>${q.chapter} · ${q.title}</small><b>${q.text}</b>${q.prog ? `<em>${q.prog}</em>` : ''}${pipsHTML()}`;
+}
+
+/* flush a life's worth of XP + mission progress */
+function flushJourney(){
+  const r = runSnapshot();
+  if (!r) return { xp: 0, ups: [], done: [] };
+  const xp = Math.round(r.eaten * .4 + r.frenzy + r.kills * 35 + r.gems * GEM_XP + r.chests * CHEST_XP + r.jackpots * 10 + runNew.length * DISCOVER_XP);
+  const st = P.stats;
+  st.kills += r.kills; st.chests = (st.chests || 0) + r.chests; st.bestTime = Math.max(st.bestTime, r.time);
+  const done = trackMissions({ eat: r.eaten, kills: r.kills, survive: r.time, boost: r.boostT, frenzy: r.frenzy, regions: r.regions,
+    chests: r.chests, vault: r.vault, portals: r.portals, jackpots: r.jackpots, gems: r.gems });
+  const ups = addXP(xp);
+  runNew = [];
+  Object.assign(G.run, { kills: 0, eaten: 0, frenzy: 0, boostT: 0, gems: 0, vault: 0, chests: 0, portals: 0, jackpots: 0, t0: G.t, regions: new Set() });
+  return { xp, ups, done };
+}
+
+function showFall(r){
+  els.hud.classList.add('hidden');
+  els.mapov.classList.add('hidden');
+  els.joy.classList.remove('on');
+  G.input.boost = G.input.cash = false;
+  P.story.mass = Math.max(12, Math.round(deadMass * .5));
+  const f = flushJourney();
+  save();
+  const why = r.cause === 'the Dune Leviathan' ? 'The Dune Leviathan swallowed you whole.'
+    : r.killer ? `<b>${r.killer}</b> cut you off.`
+    : r.cause === 'the lava' ? 'You slid into the lava.'
+    : r.cause === 'the deep water' ? 'The deep water pulled you under.' : 'You fell.';
+  const [who, line] = FALL_LINES[(Math.random() * FALL_LINES.length) | 0];
+  const cp = REG[P.story.cp || 'nest'];
+  els.res.className = 'res lose journeyres';
+  els.res.innerHTML = `
+    <div class="kicker">YOU FELL</div>
+    <p class="line" style="margin-top:14px">${why}</p>
+    <div class="say"><i>${SPEAKERS[who].glyph}</i><span><b>${SPEAKERS[who].name}</b>${line}</span></div>
+    <div class="xp">
+      <div class="xl"><span>Level ${P.level}</span><b>+${f.xp} XP</b></div>
+      <div class="tr"><div class="fl" style="width:${levelProgress() * 100}%"></div></div>
+    </div>
+    ${f.done.length ? `<div class="mdone">${f.done.map(m => `<div>✓ Mission complete — ${missionDef(m).text(m.n)}</div>`).join('')}</div>` : ''}
+    <button class="btn gold" id="rAgain">WAKE AT ${cp.name.toUpperCase()}</button>
+    <button class="btn ghost" id="rHome">HOME</button>`;
+  els.result.classList.remove('hidden');
+  cv.classList.add('dim');
+  if (f.ups.length) setTimeout(() => showLevelUps(f.ups), 900);
+  $('rAgain').onclick = () => { unlockAudio(); beginJourney(); };
+  $('rHome').onclick = () => { sfx.tap(); showHome(); };
+}
+
+function leaveJourney(){
+  if (G.player && G.player.alive) P.story.mass = Math.max(12, Math.round(G.player.mass));
+  const f = flushJourney();
+  save();
+  closeModal();
+  showHome();
+  if (f.ups.length) setTimeout(() => showLevelUps(f.ups), 700);
+}
+
+function openPause(){
+  if (G.mode !== 'journey' || G.state !== 'playing' || dlg) return;
+  G.paused = true; sfx.tap();
+  const q = questText();
+  openModal(`
+    <div class="k">PAUSED</div>
+    <h3>${q.title}</h3>
+    <p>${q.text}${q.prog ? ' · ' + q.prog : ''}</p>
+    ${pipsHTML()}
+    <button class="btn gold" id="pResume">RESUME</button>
+    <button class="btn ghost" id="pMap">MAP</button>
+    <button class="btn ghost" id="pHome">SAVE &amp; HOME</button>`, m => {
+    m.querySelector('#pResume').onclick = () => { closeModal(); G.paused = false; };
+    m.querySelector('#pMap').onclick = () => { closeModal(); openMapOverlay(); };
+    m.querySelector('#pHome').onclick = () => leaveJourney();
+  });
+}
+els.pauseBtn.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); openPause(); });
+
+function showFinale(){
+  const f = flushJourney();
+  const ups = addXP(1000);
+  save();
+  sfx.levelup(); setTimeout(() => sfx.jackpot(), 400); buzz([40, 60, 40, 60, 200]);
+  G.paused = true;
+  const ouro = SKINS.find(s => s.id === 'ouro');
+  openModal(`
+    <div class="ico">${ICON.star}</div>
+    <div class="k">THE END</div>
+    <h3>The island is whole</h3>
+    <p>Nine Scales, carried home by the smallest snake on the island. Ouro sleeps soundly again.<br><br>+1,000 XP · the <b style="color:#ffd76a">Ouro</b> skin is yours.</p>
+    <canvas id="ouroSkin" style="position:static;width:100%;height:70px;margin:-6px 0 14px"></canvas>
+    <button class="btn gold" id="fEquip">WEAR OURO’S GOLD</button>
+    <button class="btn ghost" id="fRoam">KEEP EXPLORING</button>`, m => {
+    drawSkinPreview(m.querySelector('#ouroSkin'), ouro);
+    const done = () => { closeModal(); G.paused = false; G.ouro = null; renderQuest(); if (ups.length || f.ups.length) setTimeout(() => showLevelUps([...f.ups, ...ups]), 400); };
+    m.querySelector('#fEquip').onclick = () => { P.skin = 'ouro'; save(); if (G.player) G.player.skin = ouro; done(); };
+    m.querySelector('#fRoam').onclick = done;
+  });
+}
+
+/* ---------- dialogue ---------- */
+let dlg = null;
+function dialog(lines, cb){
+  G.paused = true;
+  G.input.boost = G.input.cash = false;
+  els.joy.classList.remove('on');
+  dlg = { lines, i: 0, cb, n: 0, full: '', iv: null };
+  els.dialog.classList.remove('hidden');
+  showLine();
+}
+function showLine(){
+  const [who, text] = dlg.lines[dlg.i], sp = SPEAKERS[who];
+  els.dFace.textContent = sp.glyph;
+  els.dFace.style.setProperty('--c', sp.color);
+  els.dName.textContent = sp.name; els.dName.style.color = sp.color;
+  dlg.full = text; dlg.n = 0; els.dText.textContent = '';
+  clearInterval(dlg.iv);
+  dlg.iv = setInterval(() => {
+    if (!dlg) return;
+    dlg.n = Math.min(dlg.full.length, dlg.n + 2);
+    els.dText.textContent = dlg.full.slice(0, dlg.n);
+    if (dlg.n % 6 === 0) sfx.tick();
+    if (dlg.n >= dlg.full.length) clearInterval(dlg.iv);
+  }, 22);
+}
+function advanceDialog(){
+  if (!dlg) return;
+  if (dlg.n < dlg.full.length){ dlg.n = dlg.full.length; els.dText.textContent = dlg.full; clearInterval(dlg.iv); return; }
+  dlg.i++;
+  if (dlg.i >= dlg.lines.length){
+    clearInterval(dlg.iv);
+    const cb = dlg.cb; dlg = null;
+    els.dialog.classList.add('hidden');
+    G.paused = false;
+    cb && cb();
+  } else { sfx.tap(); showLine(); }
+}
+els.dialog.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); unlockAudio(); advanceDialog(); });
+
+/* ============================================================
    RUN
    ============================================================ */
 let runStake = 0;
 function beginRun(){
+  document.body.classList.remove('journey');
   runStake = stake();
   P.coins -= runStake;
   P.stats.games++;
@@ -209,6 +437,13 @@ function hudFrame(dt){
   if (G.state !== 'playing' && G.state !== 'ending') return;
   const p = G.player;
   if (!p) return;
+  if (G.mode === 'journey'){
+    if (p.alive) deadMass = p.mass;
+    storyTick(dt);
+    els.shieldTag.classList.toggle('on', p.alive && p.shield > 0);
+    if (p.shield > 0) els.shieldT.textContent = p.shield.toFixed(1);
+    return;
+  }
 
   const cash = p.alive ? p.cash : 0;
   if (Math.floor(cash) !== Math.floor(lastCash)){
@@ -276,7 +511,12 @@ G.hooks.feed = (text, cash, news) => {
   while (els.feed.children.length > 3) els.feed.lastChild.remove();
   setTimeout(() => { d.style.opacity = 0; setTimeout(() => d.remove(), 500); }, 4000);
 };
-G.hooks.end = r => showResult(r);
+G.hooks.end = r => G.mode === 'journey' ? showFall(r) : showResult(r);
+G.hooks.eat = o => storyEvent('eat', o);
+G.hooks.chest = c => storyEvent('chest', c);
+G.hooks.jackpot = win => storyEvent('jackpot', win);
+G.hooks.died = (s, killer, cause, h) => storyEvent('died', s, h);
+G.hooks.story = (kind, o) => storyEvent('story', kind, o);
 G.hooks.region = R => {
   const first = !P.discovered.includes(R.key);
   els.region.innerHTML = `<i>${R.icon}</i>${R.name}`;
@@ -508,7 +748,7 @@ function skinsSheet(){
     <div class="skins">${SKINS.map(s => {
       const un = skinUnlocked(s), sel = P.skin === s.id;
       return `<button class="sk ${sel ? 'sel' : ''} ${un ? '' : 'lock'}" data-id="${s.id}">
-        <canvas></canvas><b>${s.name}</b><small>${sel ? 'Equipped' : un ? 'Tap to equip' : '🔒 Level ' + s.lvl}</small></button>`;
+        <canvas></canvas><b>${s.name}</b><small>${sel ? 'Equipped' : un ? 'Tap to equip' : s.story ? '🔒 Finish the story' : '🔒 Level ' + s.lvl}</small></button>`;
     }).join('')}</div>`;
 }
 function wireSkins(){
@@ -516,7 +756,7 @@ function wireSkins(){
     const s = SKINS.find(x => x.id === b.dataset.id);
     drawSkinPreview(b.querySelector('canvas'), s);
     b.onclick = () => {
-      if (!skinUnlocked(s)){ sfx.deny(); buzz(30); toast(`Reach <b>level ${s.lvl}</b> to unlock ${s.name}`); return; }
+      if (!skinUnlocked(s)){ sfx.deny(); buzz(30); toast(s.story ? `Bring all nine Scales home to earn <b>${s.name}</b>` : `Reach <b>level ${s.lvl}</b> to unlock ${s.name}`); return; }
       P.skin = s.id; save(); sfx.tap(); buzz(10);
       els.sheetCard.innerHTML = skinsSheet(); wireSkins();
     };
@@ -580,7 +820,9 @@ function paintMap(canvas, live){
   g.scale(dpr, dpr);
   drawMap(g, size, { discovered: P.discovered, labels: true, extra: (tx, s) => {
     const dot = (x, y, rr, col) => { g.fillStyle = col; g.beginPath(); g.arc(tx(x), tx(y), rr, 0, 7); g.fill(); };
+    for (const k of P.story.scales){ const sh = world.shrines[k]; dot(sh.x, sh.y, 3.5 * s, `hsl(${SCALE_HUE[k]} 90% 65%)`); }
     if (!live) return;
+    if (G.quest){ g.strokeStyle = '#d6b8ff'; g.lineWidth = 3; g.beginPath(); g.arc(tx(G.quest.x), tx(G.quest.y), 9 * s, 0, 7); g.stroke(); }
     if (G.event) dot(G.event.x, G.event.y, 5 * s, 'rgba(56,225,255,.8)');
     if (G.king && G.king !== G.player){ const h = G.king.head(); dot(h.x, h.y, 4 * s, '#ffdf8a'); }
     if (G.boss && G.boss.phase === 'surface'){ const h = G.boss.head(); dot(h.x, h.y, 5 * s, '#ff5a4d'); }
@@ -595,12 +837,13 @@ function paintMap(canvas, live){
 }
 function openMapOverlay(){
   els.mapov.classList.remove('hidden');
+  if (G.mode === 'journey') G.paused = true;
   sfx.tap();
   const v = world.vault;
-  els.mapInfo.innerHTML = `<span><i class="sq"></i>Bank</span><span><i class="dt" style="background:#5df2c0"></i>Vault ${v.state === 'open' ? 'OPEN' : Math.ceil(v.t) + 's'}</span><span><i class="dt" style="background:#38e1ff"></i>Frenzy</span><span><i class="dt" style="background:#ff5a4d"></i>Leviathan</span><span>${P.discovered.length}/${REGIONS.length} explored · tap to close</span>`;
+  els.mapInfo.innerHTML = (G.mode === 'journey' ? `<span><i class="dt" style="background:#d6b8ff"></i>Objective</span>` : `<span><i class="sq"></i>Bank</span>`) + `<span><i class="dt" style="background:#5df2c0"></i>Vault ${v.state === 'open' ? 'OPEN' : Math.ceil(v.t) + 's'}</span><span><i class="dt" style="background:#38e1ff"></i>Frenzy</span><span><i class="dt" style="background:#ff5a4d"></i>Leviathan</span><span>${P.discovered.length}/${REGIONS.length} explored · tap to close</span>`;
   requestAnimationFrame(() => paintMap(els.mapCv, true));
 }
-els.mapov.addEventListener('pointerdown', e => { e.stopPropagation(); els.mapov.classList.add('hidden'); });
+els.mapov.addEventListener('pointerdown', e => { e.stopPropagation(); els.mapov.classList.add('hidden'); if (!dlg && els.modal.classList.contains('hidden')) G.paused = false; });
 
 function mapSheet(){
   return `<div class="grab"></div><h2>The Island</h2><p class="sub">${P.discovered.length} of ${REGIONS.length} regions discovered · +${DISCOVER_XP} XP each</p>
@@ -619,7 +862,7 @@ let joyId = null, joyX = 0, joyY = 0;
 const JOY_R = 44;
 
 cv.addEventListener('pointerdown', e => {
-  if (G.state !== 'playing') return;
+  if (G.state !== 'playing' || G.paused) return;
   unlockAudio();
   const mm = minimapRect();
   if (Math.hypot(e.clientX - (mm.x + mm.size / 2), e.clientY - (mm.y + mm.size / 2)) < mm.size / 2 + 6){ openMapOverlay(); return; }
@@ -677,6 +920,8 @@ holdButton(els.bBoost, 'boost');
 holdButton(els.bCash, 'cash');
 
 addEventListener('keydown', e => {
+  if (dlg && (e.code === 'Space' || e.code === 'Enter')){ e.preventDefault(); advanceDialog(); return; }
+  if (e.code === 'Escape' && G.mode === 'journey' && G.state === 'playing'){ if (G.paused && !dlg){ closeModal(); G.paused = false; } else openPause(); return; }
   if (e.code === 'Space' || e.code === 'KeyE'){ e.preventDefault(); G.input.cash = true; }
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') G.input.boost = true;
   if (e.code === 'KeyM' && G.state === 'playing'){ if (els.mapov.classList.contains('hidden')) openMapOverlay(); else els.mapov.classList.add('hidden'); }

@@ -20,6 +20,27 @@ npm run cap:add:android    # once (or cap:add:ios on a Mac)
 npm run android            # syncs www/ and opens Android Studio
 ```
 
+## Journey: the Nine Scales (main mode)
+
+> Long ago a serpent called Ouro curled around this island and fell asleep. His coil held the land together. Last night he shed nine golden Scales, and they scattered across the nine lands. Without them he is fading. This morning, in the Nest, a very small egg began to crack…
+
+You are the hatchling. Each chapter takes place in one region and teaches one of its mechanics. It ends when you **coil around** that region's Scale Shrine. Shrines are checkpoints: if you fall, you wake at the last one with half your length.
+
+| # | Chapter | Region | Guide | What you do |
+| --- | --- | --- | --- | --- |
+| 1 | The Hatchling | The Nest | 🐢 Old Moss | Eat, then learn to coil (crack a chest) |
+| 2 | The Thief in the Leaves | Wildwood | 🐍 Rattle | Chase down and cut off Rattle, who runs from you |
+| 3 | Fish Tales | Mirewater Marsh | 🐸 Mother Mire | Catch 12 fish that swim away, in slowing water |
+| 4 | The Leviathan's Hoard | Bone Desert | 🌬️ The Whisper | Grab 3 shards while the Leviathan hunts you |
+| 5 | The Ice Run | Frostbite Tundra | ❄️ Glacier Spirit | Race through 7 ice gates in 60 s on slippery ice |
+| 6 | Five Lights | Crystal Caves | ✨ Echo | Light 5 crystal hearts in the dark |
+| 7 | Beat the House | Neon Strip | 🎰 Lucky Lou | Hit 7-7-7 on a jackpot machine |
+| 8 | Through the Fire | Magma Wastes | 🦎 Cinder | Take 3 Ember Cores from beside the geysers |
+| 9 | The Vault | Sunken Ruins | 🗿 The Warden | Coil the Vault's heart while its doors are open |
+| ★ | The Great Coil | The Nest | 🐉 Ouro | Coil the World Egg. Ouro returns and you earn the **Ouro** skin |
+
+Journey mode has no money: no stakes, no wallets, no banks. XP, levels, missions, discovery and skins all carry over. The **Stake Arena** (below) is the second tab on the home screen, kept for when money and login arrive. The story lives in `www/js/story.js`: chapters are data, so new chapters, lines or step types are easy to add.
+
 ## The island (open world)
 
 The whole game is one seeded 12,000-unit island with nine regions. It is identical on every device, so players can learn it.
@@ -65,6 +86,7 @@ The whole game is one seeded 12,000-unit island with nine regions. It is identic
 | `www/css/app.css` | All styling (safe-area aware, portrait and landscape) |
 | `www/js/config.js` | Tuning, skins, missions, bot names |
 | `www/js/world.js` | The island: seeded terrain bake, regions, landmarks, rocks, decor, weather, map rendering |
+| `www/js/story.js` | The Nine Scales: chapters, dialogue, objectives, checkpoints |
 | `www/js/game.js` | Engine: snakes, bots, boss, orb spatial grid, collisions, economy, world events, renderer |
 | `www/js/main.js` | UI, input (joystick, buttons, keyboard), progression hooks |
 | `www/js/store.js` | Persistent profile (localStorage), daily reward, missions, XP |

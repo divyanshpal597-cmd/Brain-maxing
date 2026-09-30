@@ -18,6 +18,8 @@ function defaults(){
     settings: { sound: true, haptics: true },
     seenTutorial: false,
     discovered: [],
+    mode: 'journey',
+    story: { ch: 0, step: 0, prog: 0, scales: [], intro: false, done: false, cp: 'nest', mass: 12, prologue: false, drop: null },
   };
 }
 
@@ -30,7 +32,8 @@ function load(){
       daily: { ...d.daily, ...p.daily },
       missions: { ...d.missions, ...p.missions },
       stats: { ...d.stats, ...p.stats },
-      settings: { ...d.settings, ...p.settings } };
+      settings: { ...d.settings, ...p.settings },
+      story: { ...d.story, ...p.story } };
   } catch { return defaults(); }
 }
 
@@ -75,7 +78,7 @@ export function addXP(n){
   return ups;
 }
 
-export function skinUnlocked(s){ return P.level >= s.lvl; }
+export function skinUnlocked(s){ return s.story ? P.story.done : P.level >= s.lvl; }
 
 /* ---------- daily reward ---------- */
 export function dailyReady(){ return P.daily.last !== dayKey(); }

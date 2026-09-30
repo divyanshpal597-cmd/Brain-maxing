@@ -54,6 +54,7 @@ export const SKINS = [
   { id:'aurora', name:'Aurora',  lvl:15, kind:'rainbow', a:'#ffffff', b:'#ffffff', dark:'#1a1f33', hue:200 },
   { id:'midas',  name:'Midas',   lvl:20, kind:'shine',   a:'#f7c14b', b:'#e0a82e', dark:'#6b4a0c', hue:44  },
   { id:'void',   name:'Void',    lvl:25, kind:'glow',    a:'#1a1330', b:'#261b45', dark:'#8b5cf6', hue:270, glow:'#8b5cf6' },
+  { id:'ouro',   name:'Ouro',    lvl:99, story:true, kind:'shine', a:'#ffd76a', b:'#f0b93a', dark:'#7a4f06', hue:44, glow:'#ffd76a' },
 ];
 
 /* daily missions — three are drawn each day */

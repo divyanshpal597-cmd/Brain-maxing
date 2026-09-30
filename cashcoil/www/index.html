@@ -34,11 +34,18 @@
 
   <div class="hero">
     <h1 class="logo"><span>cash</span><span>coil</span></h1>
-    <p class="tag">eat · cut · cash out</p>
+    <p class="tag" id="hTag">journey of the nine scales</p>
   </div>
 
   <div class="dock-wrap">
     <button class="daily" id="hDaily"></button>
+
+    <div class="modes" id="hModes">
+      <button data-mode="journey">Journey</button>
+      <button data-mode="arena">Stake Arena</button>
+    </div>
+
+    <div class="jcard" id="hJourney"></div>
 
     <div class="stake" id="hStake">
       <button class="arr" id="stDown" aria-label="Lower stake">
@@ -85,6 +92,9 @@
   </div>
   <div class="board" id="board"></div>
   <div class="ticker" id="ticker"></div>
+  <div class="quest" id="quest"></div>
+  <div class="gtimer" id="gTimer"></div>
+  <button class="pausebtn" id="pauseBtn" aria-label="Pause"><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></button>
   <div class="regiontag" id="regionTag"></div>
   <div class="banner" id="banner"><b></b><small></small></div>
   <div class="killpop" id="killpop"></div>
@@ -113,6 +123,13 @@
 <section id="mapov" class="hidden">
   <canvas id="mapCv"></canvas>
   <div class="mapinfo" id="mapInfo"></div>
+</section>
+<section id="dialog" class="hidden">
+  <div class="dbox">
+    <div class="dface" id="dFace"></div>
+    <div class="dbody"><b id="dName"></b><p id="dText"></p></div>
+    <i class="dnext">▼</i>
+  </div>
 </section>
 <div id="modal" class="hidden"></div>
 <div id="toasts"></div>

@@ -122,7 +122,7 @@ class Grid {
 export const world = {
   bake: null, mini: null, grain: null,
   roads: [], pads: [], banks: [], portals: [], jackpots: [], chests: [], geysers: [], lava: [], rocks: [],
-  vault: null, bossHome: REG.desert,
+  vault: null, bossHome: REG.desert, shrines: {}, egg: null,
   gDecor: new Grid(500), gGlow: new Grid(500), gRocks: new Grid(400), gCanopy: new Grid(400),
 };
 
@@ -318,6 +318,18 @@ function buildLandmarks(rnd, g){
     world.jackpots.push({ x: p.x, y: p.y, cd: 0, spin: 0, reels: [0, 1, 2] });
     blockers.push({ x: p.x, y: p.y, r: 110 });
   });
+
+  // a Scale Shrine in every region (the journey's checkpoints) + the World Egg
+  world.egg = { x: 0, y: 0, r: 34 };
+  blockers.push({ x: 0, y: 0, r: 260 });
+  const SH = { nest: [520, -380], tundra: [300, -3700], caves: [2750, -2350], neon: [3750, 300], magma: [2350, 2750],
+               ruins: [-500, 3500], wild: [-2650, 2650], marsh: [-3700, -250], desert: [-2650, -2400] };
+  for (const [key, [x, y]] of Object.entries(SH)){
+    let p = snap({ x, y }, 180);
+    for (let k = 0; k < 60 && !free(p.x, p.y, 200); k++){ const a = k * 2.4, d = 120 + k * 30; p = snap({ x: x + Math.cos(a) * d, y: y + Math.sin(a) * d }, 180); }
+    world.shrines[key] = { x: p.x, y: p.y, r: 30, key };
+    blockers.push({ x: p.x, y: p.y, r: 240 });
+  }
 
   // lava pools (painted into terrain so everything can see them)
   const m = REG.magma;
