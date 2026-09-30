@@ -1,6 +1,6 @@
-# Cashcoil
+# Coil: The Nine Scales
 
-**Eat · cut · cash out.** A stake-arena snake game, rebuilt mobile-first from the original `stake-snake` prototype.
+**A little snake, a big island, nine lost Scales.** A story-driven open-world snake adventure (Journey), plus a Stake Arena mode (eat · cut · cash out) kept for when money and login arrive. Rebuilt mobile-first from the original `stake-snake` prototype. The code folder and app ID keep the old `cashcoil` name so existing installs upgrade in place.
 It is a zero-build PWA (install to home screen, works offline) with a Capacitor wrapper for native Android and iOS builds.
 
 ## Run

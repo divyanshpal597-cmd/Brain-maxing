@@ -1,7 +1,7 @@
 {
-  "name": "Cashcoil",
-  "short_name": "Cashcoil",
-  "description": "Eat. Cut. Cash out. A stake arena snake game.",
+  "name": "Coil: The Nine Scales",
+  "short_name": "Coil",
+  "description": "A little snake, a big island, nine lost Scales.",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",

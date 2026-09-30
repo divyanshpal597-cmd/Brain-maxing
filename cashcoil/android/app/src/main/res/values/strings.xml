@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Cashcoil</string>
-    <string name="title_activity_main">Cashcoil</string>
+    <string name="app_name">Coil</string>
+    <string name="title_activity_main">Coil: The Nine Scales</string>
     <string name="package_name">app.cashcoil.game</string>
     <string name="custom_url_scheme">app.cashcoil.game</string>
 </resources>

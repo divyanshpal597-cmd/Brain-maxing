@@ -1,5 +1,5 @@
 /* Offline shell: serve from cache, refresh in the background. Bump VERSION on release. */
-const VERSION = 'cashcoil-v3';
+const VERSION = 'cashcoil-v4';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/main.js', 'js/game.js', 'js/config.js', 'js/store.js', 'js/fx.js', 'js/world.js', 'js/story.js',
